@@ -80,11 +80,54 @@ A API utiliza um banco de dados relacional (SQL Server por padrão) gerenciado p
 
 **Relacionamento:** `User` 1 : N `Task` (Um usuário pode ter muitas tarefas).
 
-## Modelagem completa: Entidade e relacionamento (MER) 
+## 💾 Modelagem Entidade-Relacionamento (MER)
 
-<p align="center">
-  <img src="./image/MER.png" width="500">
-</p>
+```mermaid
+erDiagram
+    Users ||--o{ Tasks : "possui (1:N)"
+    TaskStatuses ||--o{ Tasks : "define status (1:N)"
+    Tasks ||--o{ TaskCategoryMap : "tem categorias (1:N)"
+    TaskCategories ||--o{ TaskCategoryMap : "pertence a (1:N)"
+
+    Users {
+        int Id PK
+        string FirstName
+        string LastName
+        string Email
+        string PasswordHash
+        bool IsActive
+        datetime CreatedAt
+    }
+
+    Tasks {
+        int Id PK
+        int UserId FK
+        int StatusId FK
+        string Title
+        string Description
+        int PriorityLevel
+        int EstimatedDuration
+        datetime DueDate
+        datetime CompletedAt
+        datetime CreatedAt
+    }
+
+    TaskStatuses {
+        int Id PK
+        string Name
+    }
+
+    TaskCategories {
+        int Id PK
+        string Name
+        string Description
+    }
+
+    TaskCategoryMap {
+        int TaskId PK,FK
+        int CategoryId PK,FK
+    }
+```
 
 ---
 
