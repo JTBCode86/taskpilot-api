@@ -80,7 +80,7 @@ A API utiliza um banco de dados relacional (SQL Server por padrão) gerenciado p
 
 **Relacionamento:** `User` 1 : N `Task` (Um usuário pode ter muitas tarefas).
 
-## 💾 Modelagem Entidade-Relacionamento (MER)
+### 1. Modelagem Entidade-Relacionamento (Completo)
 
 ```mermaid
 erDiagram
