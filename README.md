@@ -4,6 +4,37 @@ O TaskPilot é uma API RESTful desenvolvida em ASP.NET Core que gerencia tarefas
 
 ## 📐 Arquitetura do Projeto (Clean Architecture / CQRS)
 
+```mermaid
+flowchart TB
+    subgraph PresentationLayer [1. Camada de Apresentação]
+        Controllers[API Controllers / Minimal APIs]
+    end
+    subgraph ApplicationLayer [2. Camada de Aplicação - CQRS]
+        MediatR[MediatR Mediator Pipeline]
+        Commands[Commands: Criar / Atualizar Tarefas]
+        Queries[Queries: Consultas Paginadas / Filtros]
+        Validators[FluentValidation Pipeline Behaviors]
+    end
+    subgraph DomainLayer [3. Camada de Domínio - Core]
+        Entities[Entidades: Tarefas, Usuários, Projetos]
+        ValueObjects[Value Objects & Regras de Negócio]
+    end
+    subgraph InfrastructureLayer [4. Camada de Infraestrutura]
+        EFCore[Entity Framework Core DbContext]
+        Repository[Repositórios & Migrations]
+        Database[(PostgreSQL / SQL Server)]
+    end
+
+    Controllers -->|Envia Command/Query| MediatR
+    MediatR --> Validators
+    Validators --> Commands
+    Validators --> Queries
+    Commands --> Entities
+    Commands --> EFCore
+    Queries --> EFCore
+    EFCore --> Database
+```
+
 O projeto está estruturado em quatro camadas principais, com dependências fluindo estritamente de fora para dentro (API -> Application -> Domain).
 
 ### 1. TaskPilot.API (Apresentação)
@@ -73,9 +104,8 @@ Siga estas etapas para configurar e executar a API localmente:
 
 ```bash
 
-git clone [https://github.com/JTBCode86/gerenciador-de-tarefas.git]
-
-cd TaskPilot
+git clone https://github.com/JTBCode86/taskpilot-api.git
+cd taskpilot-api
 
 ```
 
