@@ -35,28 +35,81 @@ flowchart TB
     EFCore --> Database
 ```
 
-O projeto está estruturado em quatro camadas principais, com dependências fluindo estritamente de fora para dentro (API -> Application -> Domain).
+## 📂 Estrutura de Pastas da Solução (Clean Architecture & CQRS)
 
-### 1. TaskPilot.API (Apresentação)
-- **Função:** Ponto de entrada das requisições HTTP. Responsável pelo roteamento, serialização JSON e tratamento global de exceções (Middleware).
-- **Controladores:** Possuem a lógica mínima (`Thin Controllers`), injetando os **Serviços de Aplicação** (`IUserService`, `ITaskService`) ou o **IMediator** (se você optar por MediatR no futuro) para delegar a execução.
-- **Não Conhece:** A lógica de negócio, acesso a dados ou regras de domínio.
+A solução é organizada estritamente em **4 projetos desacoplados**, garantindo a regra de dependência da Clean Architecture (as dependências apontam sempre de fora para o núcleo de domínio):
 
-### 2. TaskPilot.Application (Aplicação / Lógica de Negócio)
-- **Função:** Contém a lógica de negócio do sistema (o "O quê" e o "Como" do sistema).
-- **Padrão Utilizado:** **Service Layer** (Camada de Serviço).
-    - Interfaces (`IUserService`, `ITaskService`) e Implementações (`UserService`, `TaskService`) que orquestram a lógica, validam e usam os Repositórios.
-- **Objetos:** Data Transfer Objects (DTOs), Command/Query Objects.
+```text
+TaskPilot.sln
+│
+├── 🌐 TaskPilot.API/                    # Camada de Entrada e Apresentação
+│   ├── Controllers/
+│   │   ├── TasksController.cs           # Endpoints de Tarefas (Thin Controller)
+│   │   └── UsersController.cs           # Endpoints de Usuários (Login/Registro)
+│   ├── Extensions/
+│   │   └── ExceptionMiddleware.cs       # Middleware de tratamento global de exceções
+│   ├── Program.cs                       # Configuração do Host e Inicialização
+│   └── Startup.cs                       # Configuração de IoC e pipeline de middlewares
+│
+├── ⚙️ TaskPilot.Application/            # Casos de Uso e Orquestração (CQRS)
+│   ├── Interfaces/
+│   │   └── IExternalApiService.cs       # Porta/Contrato para serviços externos
+│   ├── Features/
+│   │   └── Tasks/
+│   │       ├── Commands/
+│   │       │   ├── CreateTask/
+│   │       │   │   ├── CreateTaskCommand.cs        # DTO de entrada do comando
+│   │       │   │   └── CreateTaskCommandHandler.cs # Handler de criação (Caso de Uso)
+│   │       │   └── CompleteTask/
+│   │       │       ├── CompleteTaskCommand.cs      # DTO de conclusão de tarefa
+│   │       │       └── CompleteTaskCommandHandler.cs
+│   │       └── Queries/
+│   │           └── GetTaskSummary/
+│   │               ├── GetTaskSummaryQuery.cs      # DTO de consulta
+│   │               ├── GetTaskSummaryQueryHandler.cs
+│   │               └── TaskSummaryDto.cs           # DTO de saída da consulta
+│   └── DependencyInjection.cs           # Registro dos Handlers e Serviços no container IoC
+│
+├── 🏛️ TaskPilot.Domain/                 # Núcleo Central de Domínio (Puro / Sem dependências)
+│   ├── Entities/
+│   │   ├── User.cs                      # Entidade de Usuário
+│   │   ├── Task.cs                      # Entidade de Tarefa
+│   │   ├── TaskCategory.cs              # Entidade de Categoria
+│   │   ├── TaskStatus.cs                # Entidade de Status
+│   │   └── TaskCategoryMap.cs           # Entidade associativa (N:N)
+│   ├── Enums/
+│   │   └── PriorityLevel.cs             # Níveis de prioridade (Baixa, Média, Alta)
+│   ├── Interfaces/
+│   │   ├── ITaskRepository.cs           # Contrato de persistência de Tarefas
+│   │   ├── IUserRepository.cs           # Contrato de persistência de Usuários
+│   │   └── IGenericRepository.cs        # Contrato genérico base
+│   └── Exceptions/
+│       └── DomainException.cs           # Exceções customizadas para violação de regras
+│
+└── 💾 TaskPilot.Infrastructure/         # Infraestrutura, Persistência e Acesso a Dados
+    ├── Data/
+    │   ├── ApplicationDbContext.cs      # DbContext do Entity Framework Core
+    │   ├── Configurations/              # Mapeamento Fluent API
+    │   │   ├── TaskConfiguration.cs
+    │   │   └── TaskCategoryMapConfiguration.cs
+    │   └── Repositories/
+    │       ├── TaskRepository.cs        # Implementação com EF Core
+    │       └── UserRepository.cs
+    ├── ExternalServices/
+    │   └── NotificationService.cs       # Implementação de integrações externas
+    └── DependencyInjection.cs           # Injeção de dependências da infraestrutura
+```
 
-### 3. TaskPilot.Domain (Domínio / Regras de Negócio)
-- **Função:** Contém as regras de negócio centrais, entidades, exceções de domínio e contratos.
-- **Conteúdo:** Entidades (`User`, `Task`), Interfaces de Repositório (`IUserRepository`, `ITaskRepository`) e Exceções customizadas (`DomainException`).
-- **Não Conhece:** Nada sobre a aplicação (API, Services) ou infraestrutura (Banco de Dados).
+---
 
-### 4. TaskPilot.Infrastructure (Infraestrutura / Acesso a Dados)
-- **Função:** Implementação de contratos e serviços externos.
-- **Conteúdo:** Implementação dos Repositórios (`UserRepository`, `TaskRepository`), configuração do Entity Framework Core (`ApplicationDbContext`) e Strings de Conexão.
-- **Tecnologia:** Entity Framework Core (EF Core) para acesso a dados.
+### 🔍 Detalhamento das Responsabilidades por Camada
+
+| Camada | Projeto | Responsabilidade Principal | O Que Conhece |
+| :--- | :--- | :--- | :--- |
+| **Apresentação** | `TaskPilot.API` | Ponto de entrada HTTP, roteamento, serialização JSON e tratamento global de erros via `ExceptionMiddleware`. | Conhece `Application` e `Infrastructure` para injeção. |
+| **Aplicação** | `TaskPilot.Application` | Implementação do padrão **CQRS** dividido por *Features*. Segrega os comandos de escrita (*Commands*) das consultas de leitura (*Queries*). | Conhece apenas o `Domain`. |
+| **Domínio** | `TaskPilot.Domain` | O coração da aplicação. Contém as entidades de negócio, enums, contratos de repositório e regras invariantes. | **100% puro e isolado**. Não conhece nenhuma outra camada. |
+| **Infraestrutura** | `TaskPilot.Infrastructure` | Acesso ao banco de dados via Entity Framework Core, mapeamentos Fluent API, repositórios concretos e serviços externos. | Implementa as interfaces do `Domain`. |
 
 ---
 
