@@ -4,7 +4,6 @@ import requests
 from datetime import datetime
 from domain.entities import ITaskRepository, Task, CreateTaskCommand
 from typing import List
-import warnings
 
 class TaskApiAdapter(ITaskRepository):
     """Implementação do Repositório que interage com a API RESTful."""
@@ -20,8 +19,7 @@ class TaskApiAdapter(ITaskRepository):
         url = f"{self.base_url}/api/v1/Tasks/summary/{user_id}"
         
         try:
-            response = requests.get(url, verify=False)
-            #response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"Erro ao conectar ou receber resposta da API: {e}")
@@ -68,12 +66,8 @@ class TaskApiAdapter(ITaskRepository):
             "userId": command.user_id 
         }
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-        
         try:
-            response = requests.post(url, json=payload, verify=False)
-            #response = requests.post(url, json=payload)
+            response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
             
             # A API deve retornar o ID da tarefa criada (ex: 201 Created)
@@ -96,18 +90,12 @@ class TaskApiAdapter(ITaskRepository):
     # --- 🆕 NOVO MÉTODO: Encerramento ---
     def complete_task(self, task_id: int, user_id: int) -> bool:
         """Encerra uma tarefa (POST /api/v1/tasks/{taskId}/complete)."""
-        # Nota: O userId é enviado no corpo/controller da API para validação
         url = f"{self.base_url}/api/v1/Tasks/{task_id}/complete"
         
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            
-        # A requisição de encerramento geralmente não precisa de corpo, mas depende da API.
-        # Se sua API espera um corpo (ex: { userId: 1 }), adicione 'json={ "userId": user_id }' no post.
+        # A API atual usa o usuário de demonstração 1 para essa operação.
         try:
             # POST api/v1/tasks/{taskId}/complete -> 204 No Content
-            #response = requests.post(url)
-            response = requests.post(url, verify=False)
+            response = requests.post(url, timeout=10)
             response.raise_for_status() 
             
             return response.status_code == 204 # Retorna True se for 204 No Content

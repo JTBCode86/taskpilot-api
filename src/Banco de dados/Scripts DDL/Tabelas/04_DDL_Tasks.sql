@@ -15,4 +15,4 @@ CREATE TABLE Tasks (
     FOREIGN KEY (UserId) REFERENCES Users(Id),
     FOREIGN KEY (StatusId) REFERENCES TaskStatuses(Id)
 );
-GO;
+GO

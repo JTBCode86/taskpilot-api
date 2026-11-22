@@ -20,6 +20,11 @@ namespace TaskPilot.Infrastructure.Data.Repositories
         // MÉTODOS ESPECÍFICOS DA IUserRepository
         // -------------------------------------------------------------------
 
+        public Task<bool> ExistsAsync(int id)
+        {
+            return _context.Users.AnyAsync(user => user.Id == id);
+        }
+
         public async Task<User> GetByEmailAsync(string email)
         {
             // Busca o usuário pelo e-mail (crucial para autenticação)

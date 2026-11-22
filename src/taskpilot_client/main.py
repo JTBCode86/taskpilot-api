@@ -4,9 +4,10 @@ from infrastructure.api_adapter import TaskApiAdapter
 from application.use_cases import GetAllTasksUseCase, CreateTaskUseCase, CompleteTaskUseCase
 from domain.entities import Task, CreateTaskCommand
 from datetime import datetime, timedelta
+import os
 
 # 🚨 Configuração: Altere a URL base da sua API
-API_BASE_URL = "https://localhost:5001"  # Verifique a porta!
+API_BASE_URL = os.environ.get("TASKPILOT_API_URL", "http://localhost:8080")
 USER_ID_TO_FETCH = 1  # ID do usuário logado
 
 def print_task_summary(tasks: list[Task]):
@@ -56,9 +57,9 @@ def main():
     new_task_id = create_task_use_case.execute(command=new_task_command)
     
     if new_task_id > 0:
-        print(f"✅ Tarefa criada com sucesso. ID: {new_task_id}")
+        print(f"Tarefa criada com sucesso. ID: {new_task_id}")
     else:
-        print("❌ Falha ao criar tarefa. Verifique o console para erros HTTP.")
+        print("Falha ao criar tarefa. Verifique o console para erros HTTP.")
         return # Interrompe o programa se a criação falhar
 
     
@@ -73,9 +74,9 @@ def main():
     )
     
     if success:
-        print(f"✅ Tarefa ID {task_to_complete_id} encerrada com sucesso.")
+        print(f"Tarefa ID {task_to_complete_id} encerrada com sucesso.")
     else:
-        print(f"❌ Falha ao encerrar tarefa ID {task_to_complete_id}. Verifique a validação de domínio da API.")
+        print(f"Falha ao encerrar tarefa ID {task_to_complete_id}. Verifique a validação de domínio da API.")
 
     # --- DEMONSTRAÇÃO 3: BUSCAR E EXIBIR TUDO (PARA VERIFICAR MUDANÇAS) ---
     print("\n--- 3. DEMONSTRAÇÃO: BUSCA PÓS-MUDANÇAS ---")

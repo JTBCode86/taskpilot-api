@@ -1,0 +1,37 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Defina MSSQL_SA_PASSWORD no arquivo .env}
+    volumes:
+      - sql_data:/var/opt/mssql
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      - db
+    environment:
+      SQLCMDPASSWORD: ${MSSQL_SA_PASSWORD:?Defina MSSQL_SA_PASSWORD no arquivo .env}
+    volumes:
+      - ./src/Banco de dados:/scripts:ro
+      - ./docker/db-init.sh:/db-init.sh:ro
+    entrypoint: ["/bin/bash", "/db-init.sh"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__TaskPilotDBConnection: "Server=db,1433;Database=TaskPilotDB;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+    ports:
+      - "127.0.0.1:${TASKPILOT_API_PORT:-8080}:8080"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+volumes:
+  sql_data:

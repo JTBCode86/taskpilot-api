@@ -2,6 +2,7 @@
 using TaskPilot.Application.Interfaces;
 using TaskPilot.Domain.Entities;
 using TaskPilot.Domain.Enums;
+using TaskPilot.Domain.Exceptions;
 using TaskPilot.Domain.Interfaces;
 using System.Threading.Tasks;
 using System;
@@ -10,18 +11,27 @@ namespace TaskPilot.Application.Features.Tasks.Commands.CreateTask
 {
     public class CreateTaskCommandHandler
     {
-        // Dependências: Apenas interfaces do Domain (ITaskRepository) e Application (IExternalApiService)
         private readonly ITaskRepository _taskRepository;
+        private readonly IUserRepository _userRepository;
         private readonly IExternalApiService _externalApiService;
 
-        public CreateTaskCommandHandler(ITaskRepository taskRepository, IExternalApiService externalApiService)
+        public CreateTaskCommandHandler(
+            ITaskRepository taskRepository,
+            IUserRepository userRepository,
+            IExternalApiService externalApiService)
         {
             _taskRepository = taskRepository;
+            _userRepository = userRepository;
             _externalApiService = externalApiService;
         }
 
         public async Task<int> Handle(CreateTaskCommand command)
         {
+            if (!await _userRepository.ExistsAsync(command.UserId))
+            {
+                throw new NotFoundException($"Usuário com ID {command.UserId} não encontrado.");
+            }
+
             // 1. Lógica de Negócio (Mapeamento do Command para a Entidade do Domínio)
             var newTask = new Domain.Entities.Task
             {

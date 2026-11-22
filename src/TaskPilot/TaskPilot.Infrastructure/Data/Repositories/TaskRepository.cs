@@ -97,7 +97,7 @@ namespace TaskPilot.Infrastructure.Data.Repositories
 
             // Mapeia o resultado da SP para a Entidade Task
             return await _context.Tasks
-                .FromSqlRaw("EXEC GetOverdueTasksByUserId @UserId", userIdParam)
+                .FromSqlRaw("EXEC dbo.SpGetOverdueTasksByUserId @UserId", userIdParam)
                 .ToListAsync();
         }
 

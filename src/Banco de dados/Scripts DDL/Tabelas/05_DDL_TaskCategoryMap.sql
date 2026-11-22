@@ -7,4 +7,4 @@ CREATE TABLE TaskCategoryMap (
     FOREIGN KEY (TaskId) REFERENCES Tasks(Id) ON DELETE CASCADE, -- Se a Tarefa for apagada, o registro é apagado aqui.
     FOREIGN KEY (CategoryId) REFERENCES TaskCategories(Id)
 );
-GO;
+GO

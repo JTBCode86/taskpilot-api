@@ -1,0 +1,30 @@
+@baseUrl = http://localhost:8080
+
+### Verifica a conectividade da API com o banco
+GET {{baseUrl}}/health
+
+### Criar tarefa para o usuário de demonstração
+POST {{baseUrl}}/api/v1/tasks
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "title": "Preparar relatório"
+}
+
+### Título ausente: 400
+POST {{baseUrl}}/api/v1/tasks
+Content-Type: application/json
+
+{
+  "userId": 1
+}
+
+### Usuário inexistente: 404
+POST {{baseUrl}}/api/v1/tasks
+Content-Type: application/json
+
+{
+  "userId": 2147483647,
+  "title": "Preparar relatório"
+}

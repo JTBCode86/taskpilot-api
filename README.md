@@ -1,290 +1,78 @@
-# 🚀 TaskPilot API
+# TaskPilot API
 
-O TaskPilot é uma API RESTful desenvolvida em ASP.NET Core que gerencia tarefas e usuários. O projeto segue os princípios da Arquitetura Limpa (Clean Architecture) e utiliza padrões modernos de desenvolvimento, como CQRS (Command Query Responsibility Segregation), para garantir separação de responsabilidades, escalabilidade e manutenibilidade.
+API de tarefas e usuários em ASP.NET Core, com SQL Server e cliente de exemplo em Python. A solução separa domínio, aplicação, infraestrutura e API. Os endpoints de tarefas permitem criar, concluir e consultar um resumo por usuário.
 
-## 📐 Arquitetura do Projeto (Clean Architecture / CQRS)
+Para criar uma tarefa, informe um título não vazio com até 256 caracteres e o ID de um usuário existente. Um título inválido retorna HTTP 400; um usuário inexistente retorna HTTP 404. Os erros usam o formato Problem Details.
 
-```mermaid
-flowchart TB
-    subgraph PresentationLayer [1. Camada de Apresentação]
-        Controllers[API Controllers / Minimal APIs]
-    end
-    subgraph ApplicationLayer [2. Camada de Aplicação - CQRS]
-        MediatR[MediatR Mediator Pipeline]
-        Commands[Commands: Criar / Atualizar Tarefas]
-        Queries[Queries: Consultas Paginadas / Filtros]
-        Validators[FluentValidation Pipeline Behaviors]
-    end
-    subgraph DomainLayer [3. Camada de Domínio - Core]
-        Entities[Entidades: Tarefas, Usuários, Projetos]
-        ValueObjects[Value Objects & Regras de Negócio]
-    end
-    subgraph InfrastructureLayer [4. Camada de Infraestrutura]
-        EFCore[Entity Framework Core DbContext]
-        Repository[Repositórios & Migrations]
-        Database[(PostgreSQL / SQL Server)]
-    end
+## Ambiente de desenvolvimento com Docker
 
-    Controllers -->|Envia Command/Query| MediatR
-    MediatR --> Validators
-    Validators --> Commands
-    Validators --> Queries
-    Commands --> Entities
-    Commands --> EFCore
-    Queries --> EFCore
-    EFCore --> Database
+Pré-requisitos: Docker Engine com Compose e containers Linux, Git e pelo menos 2 GB de memória disponíveis para o SQL Server. A imagem oficial do SQL Server para Linux requer arquitetura x86-64 suportada. Não é necessário instalar SQL Server nem o SDK .NET no computador.
+
+Na raiz do repositório, copie `.env.example` para `.env` e substitua a senha de exemplo por uma senha forte, exclusiva para desenvolvimento. Para o formato da string de conexão usado aqui, não inclua ponto e vírgula, aspas ou cifrão na senha. Ela deve atender à política de complexidade do SQL Server. Nunca compartilhe ou versione `.env`.
+
+No PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+# Edite .env e altere MSSQL_SA_PASSWORD.
+docker compose up --build -d
+docker compose ps -a
+docker compose logs db-init api
 ```
 
-## 📂 Estrutura de Pastas da Solução (Clean Architecture & CQRS)
+O serviço `db-init` aguarda o banco e executa os scripts versionados em uma transação na primeira inicialização. Ele deve terminar com sucesso antes da API iniciar. Na primeira execução são criados os status e um usuário de demonstração de ID 1, sem senha utilizável. Se o banco já contiver objetos sem o marcador de inicialização, o processo interrompe a execução para evitar alterar dados existentes.
 
-A solução é organizada estritamente em **4 projetos desacoplados**, garantindo a regra de dependência da Clean Architecture (as dependências apontam sempre de fora para o núcleo de domínio):
+- Swagger: http://localhost:8080/swagger
+- Saúde da API e conexão ao banco: http://localhost:8080/health
+- Resumo de tarefas do usuário de demonstração: http://localhost:8080/api/v1/tasks/summary/1
 
-```text
-TaskPilot.sln
-│
-├── 🌐 TaskPilot.API/                    # Camada de Entrada e Apresentação
-│   ├── Controllers/
-│   │   ├── TasksController.cs           # Endpoints de Tarefas (Thin Controller)
-│   │   └── UsersController.cs           # Endpoints de Usuários (Login/Registro)
-│   ├── Extensions/
-│   │   └── ExceptionMiddleware.cs       # Middleware de tratamento global de exceções
-│   ├── Program.cs                       # Configuração do Host e Inicialização
-│   └── Startup.cs                       # Configuração de IoC e pipeline de middlewares
-│
-├── ⚙️ TaskPilot.Application/            # Casos de Uso e Orquestração (CQRS)
-│   ├── Interfaces/
-│   │   └── IExternalApiService.cs       # Porta/Contrato para serviços externos
-│   ├── Features/
-│   │   └── Tasks/
-│   │       ├── Commands/
-│   │       │   ├── CreateTask/
-│   │       │   │   ├── CreateTaskCommand.cs        # DTO de entrada do comando
-│   │       │   │   └── CreateTaskCommandHandler.cs # Handler de criação (Caso de Uso)
-│   │       │   └── CompleteTask/
-│   │       │       ├── CompleteTaskCommand.cs      # DTO de conclusão de tarefa
-│   │       │       └── CompleteTaskCommandHandler.cs
-│   │       └── Queries/
-│   │           └── GetTaskSummary/
-│   │               ├── GetTaskSummaryQuery.cs      # DTO de consulta
-│   │               ├── GetTaskSummaryQueryHandler.cs
-│   │               └── TaskSummaryDto.cs           # DTO de saída da consulta
-│   └── DependencyInjection.cs           # Registro dos Handlers e Serviços no container IoC
-│
-├── 🏛️ TaskPilot.Domain/                 # Núcleo Central de Domínio (Puro / Sem dependências)
-│   ├── Entities/
-│   │   ├── User.cs                      # Entidade de Usuário
-│   │   ├── Task.cs                      # Entidade de Tarefa
-│   │   ├── TaskCategory.cs              # Entidade de Categoria
-│   │   ├── TaskStatus.cs                # Entidade de Status
-│   │   └── TaskCategoryMap.cs           # Entidade associativa (N:N)
-│   ├── Enums/
-│   │   └── PriorityLevel.cs             # Níveis de prioridade (Baixa, Média, Alta)
-│   ├── Interfaces/
-│   │   ├── ITaskRepository.cs           # Contrato de persistência de Tarefas
-│   │   ├── IUserRepository.cs           # Contrato de persistência de Usuários
-│   │   └── IGenericRepository.cs        # Contrato genérico base
-│   └── Exceptions/
-│       └── DomainException.cs           # Exceções customizadas para violação de regras
-│
-└── 💾 TaskPilot.Infrastructure/         # Infraestrutura, Persistência e Acesso a Dados
-    ├── Data/
-    │   ├── ApplicationDbContext.cs      # DbContext do Entity Framework Core
-    │   ├── Configurations/              # Mapeamento Fluent API
-    │   │   ├── TaskConfiguration.cs
-    │   │   └── TaskCategoryMapConfiguration.cs
-    │   └── Repositories/
-    │       ├── TaskRepository.cs        # Implementação com EF Core
-    │       └── UserRepository.cs
-    ├── ExternalServices/
-    │   └── NotificationService.cs       # Implementação de integrações externas
-    └── DependencyInjection.cs           # Injeção de dependências da infraestrutura
+O Compose publica a API apenas na interface local e não publica a porta do banco. O volume `sql_data` mantém os dados entre reinicializações e `docker compose down`. A senha configurada na criação do volume continua sendo a senha do SQL Server; alterá-la em `.env` não muda a senha existente.
+Se a porta 8080 estiver em uso, adicione `TASKPILOT_API_PORT=8081` ao `.env` e ajuste as URLs e `TASKPILOT_API_URL` do cliente.
+
+```powershell
+docker compose down
 ```
 
----
+**Atenção:** `docker compose down --volumes` apaga permanentemente o banco do projeto. Antes de remover volumes ou atualizar o SQL Server, faça um backup e copie-o para fora do volume. Para bancos já existentes, planeje migração e backup separadamente; o inicializador não faz migrações incrementais nem importa bancos existentes. Novas alterações de esquema precisarão de uma estratégia de migração versionada.
 
-### 🔍 Detalhamento das Responsabilidades por Camada
+Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. A API ainda não implementa autenticação; não a exponha na internet ou em redes não confiáveis.
 
-| Camada | Projeto | Responsabilidade Principal | O Que Conhece |
-| :--- | :--- | :--- | :--- |
-| **Apresentação** | `TaskPilot.API` | Ponto de entrada HTTP, roteamento, serialização JSON e tratamento global de erros via `ExceptionMiddleware`. | Conhece `Application` e `Infrastructure` para injeção. |
-| **Aplicação** | `TaskPilot.Application` | Implementação do padrão **CQRS** dividido por *Features*. Segrega os comandos de escrita (*Commands*) das consultas de leitura (*Queries*). | Conhece apenas o `Domain`. |
-| **Domínio** | `TaskPilot.Domain` | O coração da aplicação. Contém as entidades de negócio, enums, contratos de repositório e regras invariantes. | **100% puro e isolado**. Não conhece nenhuma outra camada. |
-| **Infraestrutura** | `TaskPilot.Infrastructure` | Acesso ao banco de dados via Entity Framework Core, mapeamentos Fluent API, repositórios concretos e serviços externos. | Implementa as interfaces do `Domain`. |
+## Cliente Python opcional
 
----
+O cliente usa Python 3.9+ e não é necessário para executar a API:
 
-## 💾 Modelagem do Banco de Dados (Entidades Principais)
-
-A API utiliza um banco de dados relacional (SQL Server por padrão) gerenciado pelo Entity Framework Core. O modelo de domínio é simples, com as seguintes entidades:
-
-| Entidade | Propriedade | Tipo | Descrição |
-| :--- | :--- | :--- | :--- |
-| **User** | `Id` | `int` | Chave primária. |
-| | `Username` | `string` | Nome de login do usuário. |
-| | `Email` | `string` | Email do usuário (único). |
-| | `PasswordHash` | `string` | Hash da senha (segurança). |
-| **Task** | `Id` | `int` | Chave primária. |
-| | `Title` | `string` | Título breve da tarefa. |
-| | `Description` | `string` | Descrição detalhada. |
-| | `CreatedAt` | `DateTime` | Data de criação. |
-| | `DueDate` | `DateTime` | Prazo final. |
-| | `IsCompleted` | `bool` | Status da tarefa (padrão: `false`). |
-| | `UserId` | `int` | **Chave Estrangeira** (`FK`) para o usuário proprietário. |
-
-**Relacionamento:** `User` 1 : N `Task` (Um usuário pode ter muitas tarefas).
-
-### 1. Modelagem Entidade-Relacionamento (Completo)
-
-```mermaid
-erDiagram
-    Users ||--o{ Tasks : "possui (1:N)"
-    TaskStatuses ||--o{ Tasks : "define status (1:N)"
-    Tasks ||--o{ TaskCategoryMap : "tem categorias (1:N)"
-    TaskCategories ||--o{ TaskCategoryMap : "pertence a (1:N)"
-
-    Users {
-        int Id PK
-        string FirstName
-        string LastName
-        string Email
-        string PasswordHash
-        bool IsActive
-        datetime CreatedAt
-    }
-
-    Tasks {
-        int Id PK
-        int UserId FK
-        int StatusId FK
-        string Title
-        string Description
-        int PriorityLevel
-        int EstimatedDuration
-        datetime DueDate
-        datetime CompletedAt
-        datetime CreatedAt
-    }
-
-    TaskStatuses {
-        int Id PK
-        string Name
-    }
-
-    TaskCategories {
-        int Id PK
-        string Name
-        string Description
-    }
-
-    TaskCategoryMap {
-        int TaskId PK,FK
-        int CategoryId PK,FK
-    }
-```
-
----
-
-## ⚙️ Executando o Projeto Passo a Passo
-
-Siga estas etapas para configurar e executar a API localmente:
-
-### Pré-requisitos:
-
-1.  **SDK .NET Core 3.1** (A framework alvo do projeto)
-2.  **SQL Server** (ou SQL Express LocalDB)
-3.  **Python 3.x** 
-4.  **Git**
-5.  **Editor de Código** (Visual Studio ou VS Code)
-
-### Passo 1: Clonar o Repositório
-
-```bash
-
-git clone https://github.com/JTBCode86/taskpilot-api.git
-cd taskpilot-api
-
-```
-
-### Passo 2: Configurar a Conexão com o Banco de Dados
-
-1. Abra o arquivo TaskPilot.API/appsettings.json.
-2. Localize a seção ConnectionStrings.
-3. Configure a string de conexão DefaultConnection para apontar para o seu SQL Server local ou instância do LocalDB.
-
-``` jason
-    "ConnectionStrings": {
-        "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=TaskPilotDB;Trusted_Connection=True;MultipleActiveResultSets=true"
-        // Altere esta linha conforme sua configuração de banco de dados!
-    }
-```
-
-### Passo 3: Aplicar Migrations do Entity Framework Core
-
-O projeto utiliza migrations para criar e atualizar o schema do banco de dados.
-
-1. Abra um terminal na pasta raiz da solução (TaskPilot/).
-2. Execute o comando para aplicar as migrations pendentes e criar o banco de dados:
-
-```bash
-    dotnet ef database update --project TaskPilot.Infrastructure
-```
-
-### Passo 4: Executar a Aplicação
-
-1. Navegue até o diretório do projeto da API:
-
-```bash
-    cd TaskPilot/TaskPilot.API
-```
-
-A API deve iniciar e estará rodando em https://localhost:5001 (Verifique a saída do console para confirmar a porta).
-
-2. Execute a aplicação:
-
-```bash
-    dotnet run
-```
-### Passo 5 Verificar o Swagger: Abra seu navegador e acesse a documentação interativa para confirmar que a API está no ar:
-
-```bash
-https://localhost:5001/swagger
-```
-
-### Passo 6: Acessar a Documentação (Swagger)
-
-A API estará rodando em uma porta local (verifique o launchSettings.json, geralmente http://localhost:5000 ou https://localhost:5001).
-
-Acesse a documentação interativa (Swagger UI) no seu navegador:
-
-http://localhost:[Porta_API]/swagger
-
-### Passo 7: Configurar e Executar o Cliente Python
-
-1. Instalar Dependências Python: Abra um novo terminal e navegue até a pasta do cliente Python (ajuste o caminho se necessário):
-
-```bash
-cd [Caminho para TaskPilot]/src/taskpilot_client
-pip install requests
-```
-
-2. Configurar a URL da API no Python: Abra o arquivo main.py e configure a variável API_BASE_URL para corresponder à sua API (baseado no seu último teste, é o HTTPS):
-
-```bash
-# main.py
-API_BASE_URL = "https://localhost:5001" 
-USER_ID_TO_FETCH = 1  # ID do usuário existente no seu DB
-```
-
-3. Executar o Script Python: Execute o cliente Python para testar os casos de uso (Busca, Criação e Conclusão de Tarefas):
-
-```bash
+```powershell
+cd src\taskpilot_client
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-4. Verificar a Saída: O console Python deve exibir:
+Por padrão o cliente acessa `http://localhost:8080`. Para outra instância, defina `TASKPILOT_API_URL` antes de executá-lo. Para HTTPS, o certificado deve ser confiável pelo ambiente Python. O exemplo cria e conclui uma tarefa para o usuário 1.
 
-✅ Tarefa criada com sucesso. ID: [número]
+## Desenvolvimento e testes .NET
 
-✅ Tarefa ID [número] encerrada com sucesso.
+Para compilar ou executar testes fora dos containers, instale o SDK .NET 10:
 
-O Resumo de Tarefas final, mostrando a tarefa recém-criada com o status COMPLETA.
+```powershell
+dotnet build .\src\TaskPilot\TaskPilot.API\TaskPilot.API.csproj
+dotnet test .\src\TaskPilot\TaskPilot.sln
+```
+
+Os testes de integração exigem uma instância de desenvolvimento dedicada, já inicializada pelo Compose. Eles criam tarefas permanentes no banco; não os execute em produção. Para habilitá-los:
+
+```powershell
+$env:TASKPILOT_INTEGRATION_URL = "http://localhost:8080"
+dotnet test .\src\TaskPilot\TaskPilot.Integration.Tests\TaskPilot.Integration.Tests.csproj
+Remove-Item Env:\TASKPILOT_INTEGRATION_URL
+```
+
+Sem essa variável, os testes de integração são marcados como inconclusivos. Para executar a API diretamente no host, configure `ConnectionStrings__TaskPilotDBConnection` com uma conexão SQL Server válida; o Compose não publica o banco no host por padrão.
+
+## Estrutura
+
+- `src/TaskPilot/TaskPilot.Domain`: entidades e contratos.
+- `src/TaskPilot/TaskPilot.Application`: casos de uso e regras de aplicação.
+- `src/TaskPilot/TaskPilot.Infrastructure`: acesso ao SQL Server e serviços externos.
+- `src/TaskPilot/TaskPilot.API`: endpoints HTTP e configuração.
+- `src/Banco de dados`: scripts SQL e sequência de inicialização.
+- `src/taskpilot_client`: cliente Python de demonstração.

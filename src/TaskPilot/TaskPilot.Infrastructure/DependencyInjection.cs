@@ -20,7 +20,7 @@ namespace TaskPilot.Infrastructure
 
             // 2. Registro dos Repositórios (Implementação de Interfaces do Domain)
             services.AddScoped<ITaskRepository, TaskRepository>();
-            // services.AddScoped<IUserRepository, UserRepository>();
+            services.AddScoped<IUserRepository, UserRepository>();
             // services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>)); // Se implementado
 
             // 3. Registro dos Serviços Externos (Implementação de Interfaces do Application)

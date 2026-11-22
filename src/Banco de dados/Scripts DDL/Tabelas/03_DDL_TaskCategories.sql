@@ -4,4 +4,4 @@ CREATE TABLE TaskCategories (
     Name NVARCHAR(100) NOT NULL UNIQUE,
     Description NVARCHAR(500)
 );
-GO;
+GO

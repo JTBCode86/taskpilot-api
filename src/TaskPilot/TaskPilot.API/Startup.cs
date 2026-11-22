@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using TaskPilot.Application;      // Para AddApplicationServices
 using TaskPilot.Infrastructure;   // Para AddInfrastructureServices
 using TaskPilot.API.Extensions;   // Para ExceptionMiddleware
+using TaskPilot.API.Health;
 
 namespace TaskPilot.API
 {
@@ -27,6 +28,7 @@ namespace TaskPilot.API
             services.AddInfrastructureServices(Configuration); // Passa a configuração do BD/APIs
 
             services.AddControllers();
+            services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
             // Adicionar configuração do Swagger/OpenAPI (muito útil)
             services.AddSwaggerGen(c =>
@@ -58,6 +60,7 @@ namespace TaskPilot.API
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
+                endpoints.MapHealthChecks("/health");
             });
         }
     }
