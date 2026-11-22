@@ -1,5 +1,15 @@
 SET XACT_ABORT ON;
 BEGIN TRANSACTION;
+DECLARE @LockResult INT;
+EXEC @LockResult = sys.sp_getapplock
+    @Resource = N'TaskPilotSchemaMigration',
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 60000;
+IF @LockResult < 0
+    THROW 51000, 'Could not acquire the schema migration lock.', 1;
+IF OBJECT_ID(N'dbo.TaskPilotSchemaVersion', N'U') IS NOT NULL
+    THROW 51001, 'TaskPilotDB was initialized by another process; retry initialization.', 1;
 GO
 :r "/scripts/Scripts DDL/Tabelas/01_DDL_Users.sql"
 :r "/scripts/Scripts DDL/Tabelas/02_DDL_TaskStatuses.sql"

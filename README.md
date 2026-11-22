@@ -20,7 +20,7 @@ docker compose ps -a
 docker compose logs db-init api
 ```
 
-O serviço `db-init` aguarda o banco e executa os scripts versionados em uma transação na primeira inicialização. Ele deve terminar com sucesso antes da API iniciar. Na primeira execução são criados os status e um usuário de demonstração de ID 1, sem senha utilizável. Se o banco já contiver objetos sem o marcador de inicialização, o processo interrompe a execução para evitar alterar dados existentes.
+O serviço `db-init` aguarda o banco, inicializa a versão 1 em bancos vazios e aplica as migrações pendentes. Ele deve terminar com sucesso antes da API iniciar. Na primeira execução são criados os status e um usuário de demonstração de ID 1, sem senha utilizável. Se o banco já contiver objetos sem o marcador de inicialização, o processo interrompe a execução para evitar alterar dados existentes.
 
 - Swagger: http://localhost:8080/swagger
 - Saúde da API e conexão ao banco: http://localhost:8080/health
@@ -33,9 +33,28 @@ Se a porta 8080 estiver em uso, adicione `TASKPILOT_API_PORT=8081` ao `.env` e a
 docker compose down
 ```
 
-**Atenção:** `docker compose down --volumes` apaga permanentemente o banco do projeto. Antes de remover volumes ou atualizar o SQL Server, faça um backup e copie-o para fora do volume. Para bancos já existentes, planeje migração e backup separadamente; o inicializador não faz migrações incrementais nem importa bancos existentes. Novas alterações de esquema precisarão de uma estratégia de migração versionada.
+**Atenção:** `docker compose down --volumes` apaga permanentemente o banco do projeto. Antes de aplicar migrações, remover volumes ou atualizar o SQL Server, faça um backup e copie-o para fora do volume. Bancos externos sem o marcador de versão não são importados automaticamente; sua adoção requer análise e migração separadas.
 
 Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. A API ainda não implementa autenticação; não a exponha na internet ou em redes não confiáveis.
+
+## Migrações do banco
+
+O histórico fica em `dbo.TaskPilotSchemaVersion`. Bancos criados pela versão anterior, que já possuem a marcação de versão 1, recebem as novas migrações sem recriar tabelas ou dados. A versão 2 adiciona metadados ao histórico; seu registro de versão 1 não tem data nem checksum retroativos.
+Os scripts referenciados por `init.sql` compõem a versão 1 e devem permanecer inalterados; mudanças de esquema devem ser feitas em novas migrações.
+
+Para alterar o esquema:
+
+1. Faça backup e adicione um arquivo em `src/Banco de dados/Migrations`, com a próxima versão sequencial de quatro dígitos, por exemplo `0003_adicionar_indice.sql`. Use somente letras minúsculas, números e sublinhados no nome e grave o arquivo em UTF-8 com finais de linha LF.
+2. Escreva SQL para uma única transação, sem `GO`, comandos `:sqlcmd`, `USE` ou comandos de controle de transação. Para objetos que exigem ser o primeiro comando do lote, como procedures, use SQL dinâmico com `EXEC(N'...')`. Não inclua operações que não possam ser revertidas pela transação.
+3. Pare a API com `docker compose stop api`, execute `docker compose up -d` e confira `docker compose logs db-init`. Cada migração é aplicada uma vez e registrada na mesma transação; falhas impedem a inicialização da API. Uma API que já esteja em execução não é interrompida automaticamente. Uma trava no banco serializa inicializadores concorrentes; caso dois processos tentem criar o banco vazio ao mesmo tempo, um deles pode precisar ser executado novamente.
+
+Os arquivos aplicados são identificados pelo nome e checksum SHA-256. Não edite, renomeie ou remova uma migração aplicada: crie outra para corrigir o esquema. O inicializador também recusa lacunas ou versões desconhecidas no histórico. Após uma falha, investigue os logs e corrija a migração ainda não aplicada antes de tentar novamente. As transações não substituem backups nem testes em uma cópia dos dados.
+
+Os testes de migração usam um banco e volume Docker temporários isolados e os removem ao terminar. No Windows, com a política local permitindo executar scripts PowerShell:
+
+```powershell
+.\docker\tests\Test-DatabaseMigrations.ps1
+```
 
 ## Cliente Python opcional
 
