@@ -27,6 +27,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__TaskPilotDBConnection: "Server=db,1433;Database=TaskPilotDB;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      Jwt__SigningKey: ${TASKPILOT_JWT_KEY:-}
     ports:
       - "127.0.0.1:${TASKPILOT_API_PORT:-8080}:8080"
     depends_on:

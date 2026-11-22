@@ -46,9 +46,16 @@ jobs:
       - name: Prepare isolated environment
         run: |
           password="Ci_$(openssl rand -hex 18)_9a"
+          jwt_key="$(openssl rand -hex 32)"
+          client_password="CiClient_$(openssl rand -hex 18)_9a"
           echo "::add-mask::$password"
+          echo "::add-mask::$jwt_key"
+          echo "::add-mask::$client_password"
           {
             echo "MSSQL_SA_PASSWORD=$password"
+            echo "TASKPILOT_JWT_KEY=$jwt_key"
+            echo "TASKPILOT_EMAIL=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@example.test"
+            echo "TASKPILOT_PASSWORD=$client_password"
             echo "COMPOSE_PROJECT_NAME=taskpilot-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             echo "TASKPILOT_API_PORT=0"
           } >> "$GITHUB_ENV"
@@ -94,6 +101,15 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
+          python -c '
+          import os
+          import requests
+          response = requests.post(os.environ["TASKPILOT_API_URL"] + "/api/v1/auth/register", json={
+              "firstName": "CI", "lastName": "Client", "email": os.environ["TASKPILOT_EMAIL"],
+              "password": os.environ["TASKPILOT_PASSWORD"]
+          }, timeout=10)
+          response.raise_for_status()
+          '
           output="$(python main.py)"
           printf '%s\n' "$output"
           printf '%s\n' "$output" | python -c '
@@ -105,13 +121,28 @@ jobs:
           match = re.search(r"Tarefa criada com sucesso\. ID: (\d+)", output)
           if not match or "encerrada com sucesso." not in output:
               raise SystemExit("Python client did not report success")
-          response = requests.get(os.environ["TASKPILOT_API_URL"] + "/api/v1/tasks/summary/1", timeout=10)
+          expected = f"[ID: {match.group(1)}] Nova Tarefa Criada pelo Python\n    Status: COMPLETA"
+          if expected not in output:
+              raise SystemExit("Python client did not show its completed task")
+          login = requests.post(os.environ["TASKPILOT_API_URL"] + "/api/v1/auth/login", json={
+              "email": os.environ["TASKPILOT_EMAIL"], "password": os.environ["TASKPILOT_PASSWORD"]
+          }, timeout=10)
+          login.raise_for_status()
+          auth = login.json()
+          response = requests.get(
+              os.environ["TASKPILOT_API_URL"] + "/api/v1/tasks/summary/" + str(auth["userId"]),
+              headers={"Authorization": "Bearer " + auth["accessToken"]}, timeout=10
+          )
           response.raise_for_status()
           task = next((item for item in response.json() if item["id"] == int(match.group(1))), None)
           if not task or task["title"] != "Nova Tarefa Criada pelo Python" or task["status"] != "Concluída" or not task["completedAt"]:
               raise SystemExit("Python client task was not found and completed")
           print("Python client task was created and completed.")
           '
+      - name: Test local password recovery
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python docker/tests/test_password_recovery.py
       - name: Show container logs on failure
         if: failure()
         run: |

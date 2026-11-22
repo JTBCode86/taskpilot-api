@@ -1,0 +1,47 @@
+@baseUrl = http://localhost:5000
+@email = replace-with-your-email
+@password = replace-with-your-password
+@accessToken = replace-with-your-token
+@userId = replace-with-your-user-id
+@taskId = replace-with-your-task-id
+
+### Criar conta
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Example",
+  "lastName": "User",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Fazer login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Consultar a conta autenticada
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{accessToken}}
+
+### Criar tarefa
+POST {{baseUrl}}/api/v1/tasks
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Minha tarefa"
+}
+
+### Consultar tarefas
+GET {{baseUrl}}/api/v1/tasks/summary/{{userId}}
+Authorization: Bearer {{accessToken}}
+
+### Concluir tarefa
+POST {{baseUrl}}/api/v1/tasks/{{taskId}}/complete
+Authorization: Bearer {{accessToken}}

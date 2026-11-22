@@ -7,10 +7,12 @@ using TaskPilot.Application.Features.Tasks.Queries.GetTaskSummary;
 using TaskPilot.Domain.Exceptions;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Authorization;
 
 namespace TaskPilot.API.Controllers
 {
     [ApiController]
+    [Authorize]
     [Route("api/v1/[controller]")]
     public class TasksController : ControllerBase
     {
@@ -36,11 +38,10 @@ namespace TaskPilot.API.Controllers
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> CreateTask([FromBody] CreateTaskCommand command)
         {
-            // Simulação de obtenção do UserId logado (em um projeto real, viria do Token/Claims)
-            // No nosso cenário, o UserId é passado no corpo do Command para teste fácil
-            // int userId = GetCurrentUserId(); 
-
-            // O Controller apenas chama o Handler e trata a resposta HTTP
+            var currentUserId = CurrentUserId();
+            if (command.UserId != 0 && command.UserId != currentUserId)
+                return Forbid();
+            command.UserId = currentUserId;
             int newTaskId;
             try
             {
@@ -62,6 +63,8 @@ namespace TaskPilot.API.Controllers
         [HttpGet("summary/{userId}")]
         public async Task<ActionResult<IEnumerable<TaskSummaryDto>>> GetTaskSummary(int userId)
         {
+            if (userId != CurrentUserId())
+                return Forbid();
             var query = new GetTaskSummaryQuery { UserId = userId };
 
             var summary = await _getSummaryHandler.Handle(query);
@@ -73,8 +76,7 @@ namespace TaskPilot.API.Controllers
         [HttpPost("{taskId}/complete")]
         public async Task<IActionResult> CompleteTask(int taskId)
         {
-            // Simulação: assumindo que o userId 1 está tentando completar a tarefa
-            int currentUserId = 1;
+            int currentUserId = CurrentUserId();
 
             var command = new CompleteTaskCommand
             {
@@ -97,6 +99,9 @@ namespace TaskPilot.API.Controllers
                 // Erro de regra de negócio (ex: "Tarefa bloqueada")
                 return BadRequest(new { Message = ex.Message }); // 400 Bad Request
             }
+
         }
+
+        private int CurrentUserId() => int.Parse(User.FindFirst("sub")!.Value);
     }
 }

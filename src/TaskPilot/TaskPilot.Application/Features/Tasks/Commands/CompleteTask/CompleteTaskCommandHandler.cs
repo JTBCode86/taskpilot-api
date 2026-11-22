@@ -21,16 +21,9 @@ namespace TaskPilot.Application.Features.Tasks.Commands.CompleteTask
         {
             var task = await _taskRepository.GetByIdAsync(command.TaskId);
 
-            if (task == null)
+            if (task == null || task.UserId != command.UserId)
             {
-                // Poderia ser ApplicationException, mas NotFound é comum na API
                 throw new KeyNotFoundException($"Tarefa com ID {command.TaskId} não encontrada.");
-            }
-
-            // Regra de Negócio 1: O usuário só pode completar suas próprias tarefas
-            if (task.UserId != command.UserId)
-            {
-                throw new DomainException("Usuário não tem permissão para completar esta tarefa.");
             }
 
             // Regra de Negócio 2: Não pode completar se já estiver concluída ou bloqueada (StatusId = 4)
@@ -53,19 +46,16 @@ namespace TaskPilot.Application.Features.Tasks.Commands.CompleteTask
 
         public async Task<int> Handle(CompleteTaskCommand command, CancellationToken cancellationToken)
         {
-            var task = await _taskRepository.GetByIdAsync(command.TaskId);
-
-            if (task == null)
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await Handle(command);
+            }
+            catch (KeyNotFoundException)
             {
                 throw new NotFoundException($"Tarefa com ID {command.TaskId} não encontrada.");
             }
-
-            task.StatusId = 2;
-            task.CompletedAt = DateTime.UtcNow;
-
-            await _taskRepository.UpdateAsync(task);
-
-            return task.Id;
+            return command.TaskId;
         }
     }
 }

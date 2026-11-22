@@ -2,19 +2,28 @@
 
 API de tarefas e usuários em ASP.NET Core, com SQL Server e cliente de exemplo em Python. A solução separa domínio, aplicação, infraestrutura e API. Os endpoints de tarefas permitem criar, concluir e consultar um resumo por usuário.
 
-Para criar uma tarefa, informe um título não vazio com até 256 caracteres e o ID de um usuário existente. Um título inválido retorna HTTP 400; um usuário inexistente retorna HTTP 404. Os erros usam o formato Problem Details.
+Para criar uma tarefa, autentique-se e informe um título não vazio com até 256 caracteres. A tarefa pertence ao usuário do token; um título inválido retorna HTTP 400.
 
 ## Ambiente de desenvolvimento com Docker
 
 Pré-requisitos: Docker Engine com Compose e containers Linux, Git e pelo menos 2 GB de memória disponíveis para o SQL Server. A imagem oficial do SQL Server para Linux requer arquitetura x86-64 suportada. Não é necessário instalar SQL Server nem o SDK .NET no computador.
 
-Na raiz do repositório, copie `.env.example` para `.env` e substitua a senha de exemplo por uma senha forte, exclusiva para desenvolvimento. Para o formato da string de conexão usado aqui, não inclua ponto e vírgula, aspas ou cifrão na senha. Ela deve atender à política de complexidade do SQL Server. Nunca compartilhe ou versione `.env`.
+Na raiz do repositório, copie `.env.example` para `.env` e substitua a senha de exemplo por uma senha forte, exclusiva para desenvolvimento. Para o formato da string de conexão usado aqui, não inclua ponto e vírgula, aspas ou cifrão na senha. Ela deve atender à política de complexidade do SQL Server. Defina também `TASKPILOT_JWT_KEY` como um segredo aleatório e exclusivo de pelo menos 32 bytes; a API não inicia sem ele. Nunca compartilhe ou versione `.env`.
+
+No PowerShell, gere um segredo de 32 bytes e copie o resultado para `TASKPILOT_JWT_KEY` no `.env`:
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+[Convert]::ToBase64String($bytes)
+```
 
 No PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
-# Edite .env e altere MSSQL_SA_PASSWORD.
+# Edite .env e configure MSSQL_SA_PASSWORD e TASKPILOT_JWT_KEY.
 docker compose up --build -d
 docker compose ps -a
 docker compose logs db-init api
@@ -24,7 +33,7 @@ O serviço `db-init` aguarda o banco, inicializa a versão 1 em bancos vazios e 
 
 - Swagger: http://localhost:8080/swagger
 - Saúde da API e conexão ao banco: http://localhost:8080/health
-- Resumo de tarefas do usuário de demonstração: http://localhost:8080/api/v1/tasks/summary/1
+- Os endpoints de tarefas exigem um token de acesso; consulte a seção Autenticação.
 
 O Compose publica a API apenas na interface local e não publica a porta do banco. O volume `sql_data` mantém os dados entre reinicializações e `docker compose down`. A senha configurada na criação do volume continua sendo a senha do SQL Server; alterá-la em `.env` não muda a senha existente.
 Se a porta 8080 estiver em uso, adicione `TASKPILOT_API_PORT=8081` ao `.env` e ajuste as URLs e `TASKPILOT_API_URL` do cliente.
@@ -35,7 +44,21 @@ docker compose down
 
 **Atenção:** `docker compose down --volumes` apaga permanentemente o banco do projeto. Antes de aplicar migrações, remover volumes ou atualizar o SQL Server, faça um backup e copie-o para fora do volume. Bancos externos sem o marcador de versão não são importados automaticamente; sua adoção requer análise e migração separadas.
 
-Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. A API ainda não implementa autenticação; não a exponha na internet ou em redes não confiáveis.
+Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação, ainda faltam HTTPS, limitação de tentativas, verificação de e-mail e outros controles para produção. Não exponha a API na internet ou em redes não confiáveis.
+
+## Autenticação
+
+Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastName`, `email` e `password` (12 a 128 caracteres). Depois, use `POST /api/v1/auth/login` com e-mail e senha. O retorno contém `accessToken`, `userId` e `expiresAt`; envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
+
+O token expira em 30 minutos. Cada usuário só pode consultar e concluir suas próprias tarefas; o `userId` opcional na criação deve corresponder ao token. Credenciais inválidas ou token ausente retornam 401; tentativas de acesso ao resumo ou criação para outro usuário retornam 403, e a conclusão de uma tarefa de outro usuário retorna 404. Alterar a chave JWT ou a senha invalida os tokens anteriores.
+
+O usuário de demonstração existente continua sem senha utilizável e suas tarefas são preservadas. Para recuperar o acesso, com os containers em execução, use o comando administrativo local abaixo e digite a nova senha duas vezes. Ele exige acesso ao banco pelo Compose e não cria uma rota pública de recuperação:
+
+```powershell
+docker compose run --rm --no-deps api reset-password 1
+```
+
+Substitua `1` pelo ID desejado. A senha não aparece na digitação; contas inativas não são alteradas. Não passe senhas como argumentos nem compartilhe tokens. A recuperação de contas reais exige um processo administrativo confiável e não deve ser exposta a clientes.
 
 ## Migrações do banco
 
@@ -66,7 +89,7 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-Por padrão o cliente acessa `http://localhost:8080`. Para outra instância, defina `TASKPILOT_API_URL` antes de executá-lo. Para HTTPS, o certificado deve ser confiável pelo ambiente Python. O exemplo cria e conclui uma tarefa para o usuário 1.
+Por padrão o cliente acessa `http://localhost:8080`. Para outra instância, defina `TASKPILOT_API_URL` antes de executá-lo. Para HTTPS, o certificado deve ser confiável pelo ambiente Python. O exemplo faz login e cria e conclui uma tarefa da conta informada. Cadastre a conta primeiro, defina `TASKPILOT_EMAIL` e `TASKPILOT_PASSWORD` no ambiente local e remova essas variáveis após o uso. Não versione credenciais.
 
 ## Desenvolvimento e testes .NET
 
@@ -85,13 +108,13 @@ dotnet test .\src\TaskPilot\TaskPilot.Integration.Tests\TaskPilot.Integration.Te
 Remove-Item Env:\TASKPILOT_INTEGRATION_URL
 ```
 
-Sem essa variável, os testes de integração são marcados como inconclusivos. Para executar a API diretamente no host, configure `ConnectionStrings__TaskPilotDBConnection` com uma conexão SQL Server válida; o Compose não publica o banco no host por padrão.
+Sem essa variável, os testes de integração são marcados como inconclusivos. Para executar a API diretamente no host, configure `ConnectionStrings__TaskPilotDBConnection` com uma conexão SQL Server válida e `Jwt__SigningKey` com um segredo aleatório; o Compose não publica o banco no host por padrão.
 
 ## Integração contínua
 
-O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo compila a solução, executa os testes unitários .NET e Python, e testa a API e o cliente Python contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
+O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local e o cliente Python contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
 
-Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco da integração é gerada para cada execução. O CI não faz deploy nem adiciona autenticação à API.
+Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco, a chave JWT e as credenciais do cliente de teste são geradas para cada execução. O CI não faz deploy.
 
 ## Estrutura
 

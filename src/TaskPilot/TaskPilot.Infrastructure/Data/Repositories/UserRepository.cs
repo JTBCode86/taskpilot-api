@@ -3,6 +3,9 @@ using TaskPilot.Domain.Entities;
 using TaskPilot.Domain.Interfaces;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Microsoft.Data.SqlClient;
+using TaskPilot.Domain.Exceptions;
+using System.Threading;
 
 namespace TaskPilot.Infrastructure.Data.Repositories
 {
@@ -25,10 +28,14 @@ namespace TaskPilot.Infrastructure.Data.Repositories
             return _context.Users.AnyAsync(user => user.Id == id);
         }
 
-        public async Task<User> GetByEmailAsync(string email)
+        public async Task<User> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
         {
-            // Busca o usuário pelo e-mail (crucial para autenticação)
-            return await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            return await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
+        }
+
+        public Task<User> GetForAuthenticationByIdAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return _context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         }
 
         // -------------------------------------------------------------------
@@ -50,8 +57,20 @@ namespace TaskPilot.Infrastructure.Data.Repositories
 
         public async Task<int> AddAsync(User entity)
         {
+            return await AddForAuthenticationAsync(entity);
+        }
+
+        public async Task<int> AddForAuthenticationAsync(User entity, CancellationToken cancellationToken = default)
+        {
             _context.Users.Add(entity);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException sql && (sql.Number == 2601 || sql.Number == 2627))
+            {
+                throw new DuplicateUserException();
+            }
             return entity.Id;
         }
 

@@ -8,6 +8,15 @@ using TaskPilot.Application;      // Para AddApplicationServices
 using TaskPilot.Infrastructure;   // Para AddInfrastructureServices
 using TaskPilot.API.Extensions;   // Para ExceptionMiddleware
 using TaskPilot.API.Health;
+using System;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using TaskPilot.API.Auth;
+using TaskPilot.Domain.Entities;
+using TaskPilot.Domain.Interfaces;
 
 namespace TaskPilot.API
 {
@@ -27,6 +36,46 @@ namespace TaskPilot.API
             services.AddApplicationServices();
             services.AddInfrastructureServices(Configuration); // Passa a configuração do BD/APIs
 
+            var tokens = new TokenService(Configuration["Jwt:SigningKey"]);
+            services.AddSingleton(tokens);
+            services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+            services.AddScoped<IAccountService, AccountService>();
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.MapInboundClaims = false;
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = TokenService.Issuer,
+                        ValidateAudience = true,
+                        ValidAudience = TokenService.Audience,
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = tokens.SigningKey,
+                        ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
+                        ValidateLifetime = true,
+                        RequireExpirationTime = true,
+                        ClockSkew = TimeSpan.Zero
+                    };
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnTokenValidated = async context =>
+                        {
+                            var subject = context.Principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                            if (!int.TryParse(subject, out var userId) || userId <= 0)
+                            {
+                                context.Fail("Token invÃ¡lido.");
+                                return;
+                            }
+                            var users = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+                            var user = await users.GetForAuthenticationByIdAsync(userId, context.HttpContext.RequestAborted);
+                            var stamp = context.Principal.FindFirst(TokenService.PasswordStampClaim)?.Value;
+                            if (!tokens.IsCurrent(user, stamp))
+                                context.Fail("Token invÃ¡lido.");
+                        }
+                    };
+                });
+            services.AddAuthorization();
             services.AddControllers();
             services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
@@ -34,6 +83,13 @@ namespace TaskPilot.API
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "TaskPilot API", Version = "v1" });
+                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT"
+                });
+                c.OperationFilter<SwaggerAuthorizationFilter>();
             });
         }
 
@@ -55,6 +111,7 @@ namespace TaskPilot.API
 
             app.UseHttpsRedirection();
             app.UseRouting();
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>

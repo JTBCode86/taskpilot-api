@@ -8,8 +8,9 @@ from typing import List
 class TaskApiAdapter(ITaskRepository):
     """Implementação do Repositório que interage com a API RESTful."""
     
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, access_token: str):
         self.base_url = base_url
+        self.headers = {"Authorization": f"Bearer {access_token}"}
 
     # --- Método Existente (Busca) ---
     # ... (get_all_tasks permanece o mesmo) ...
@@ -19,7 +20,7 @@ class TaskApiAdapter(ITaskRepository):
         url = f"{self.base_url}/api/v1/Tasks/summary/{user_id}"
         
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"Erro ao conectar ou receber resposta da API: {e}")
@@ -67,7 +68,7 @@ class TaskApiAdapter(ITaskRepository):
         }
 
         try:
-            response = requests.post(url, json=payload, timeout=10)
+            response = requests.post(url, json=payload, headers=self.headers, timeout=10)
             response.raise_for_status()
             
             # A API deve retornar o ID da tarefa criada (ex: 201 Created)
@@ -92,10 +93,9 @@ class TaskApiAdapter(ITaskRepository):
         """Encerra uma tarefa (POST /api/v1/tasks/{taskId}/complete)."""
         url = f"{self.base_url}/api/v1/Tasks/{task_id}/complete"
         
-        # A API atual usa o usuário de demonstração 1 para essa operação.
         try:
             # POST api/v1/tasks/{taskId}/complete -> 204 No Content
-            response = requests.post(url, timeout=10)
+            response = requests.post(url, headers=self.headers, timeout=10)
             response.raise_for_status() 
             
             return response.status_code == 204 # Retorna True se for 204 No Content

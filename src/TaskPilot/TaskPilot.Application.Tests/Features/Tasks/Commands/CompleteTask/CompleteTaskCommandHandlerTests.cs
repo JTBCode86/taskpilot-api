@@ -13,7 +13,7 @@ using System.Threading;
 public class CompleteTaskCommandHandlerTests
 {
     // A constante de status é crucial para o teste de sucesso.
-    private const int CompletedStatusId = 2;
+    private const int CompletedStatusId = 3;
 
     [Fact]
     public async Task Handle_ShouldUpdateTaskStatusToCompleted_WhenTaskExists()
@@ -55,7 +55,7 @@ public class CompleteTaskCommandHandlerTests
         Assert.NotNull(taskToUpdate.CompletedAt);
         
         // Garante que a data de conclusão está próxima do tempo de execução do teste
-        Assert.True(taskToUpdate.CompletedAt.Value > DateTime.UtcNow.AddMinutes(-1));
+        Assert.True(taskToUpdate.CompletedAt.Value > DateTime.Now.AddMinutes(-1));
 
         // 3. Verifica se o método de atualização do repositório foi CHAMADO EXATAMENTE UMA VEZ
         mockRepo.Verify(r => r.UpdateAsync(taskToUpdate), Times.Once);
@@ -76,5 +76,17 @@ public class CompleteTaskCommandHandlerTests
 
         // ACT & ASSERT
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(command, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotCompleteAnotherUsersTask()
+    {
+        var repository = new Mock<ITaskRepository>();
+        repository.Setup(r => r.GetByIdAsync(5)).ReturnsAsync(new DomainTask { Id = 5, UserId = 1 });
+        var handler = new CompleteTaskCommandHandler(repository.Object);
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            handler.Handle(new CompleteTaskCommand { TaskId = 5, UserId = 2 }, CancellationToken.None));
+        repository.Verify(r => r.UpdateAsync(It.IsAny<DomainTask>()), Times.Never);
     }
 }
