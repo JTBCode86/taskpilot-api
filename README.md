@@ -87,6 +87,12 @@ Remove-Item Env:\TASKPILOT_INTEGRATION_URL
 
 Sem essa variável, os testes de integração são marcados como inconclusivos. Para executar a API diretamente no host, configure `ConnectionStrings__TaskPilotDBConnection` com uma conexão SQL Server válida; o Compose não publica o banco no host por padrão.
 
+## Integração contínua
+
+O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo compila a solução, executa os testes unitários .NET e Python, e testa a API e o cliente Python contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
+
+Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco da integração é gerada para cada execução. O CI não faz deploy nem adiciona autenticação à API.
+
 ## Estrutura
 
 - `src/TaskPilot/TaskPilot.Domain`: entidades e contratos.

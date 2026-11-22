@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Build solution
+        run: dotnet build src/TaskPilot/TaskPilot.sln --configuration Release
+      - name: Run .NET unit tests
+        run: dotnet test src/TaskPilot/TaskPilot.Application.Tests/TaskPilot.Application.Tests.csproj --configuration Release --no-build
+      - name: Install Python dependencies
+        run: python -m pip install -r src/taskpilot_client/requirements.txt
+      - name: Run Python unit tests
+        working-directory: src/taskpilot_client
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m unittest discover -s tests -v
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Prepare isolated environment
+        run: |
+          password="Ci_$(openssl rand -hex 18)_9a"
+          echo "::add-mask::$password"
+          {
+            echo "MSSQL_SA_PASSWORD=$password"
+            echo "COMPOSE_PROJECT_NAME=taskpilot-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "TASKPILOT_API_PORT=0"
+          } >> "$GITHUB_ENV"
+      - name: Start API and database
+        run: |
+          docker compose up --build -d
+          address="$(docker compose port api 8080)"
+          test -n "$address"
+          url="http://$address"
+          {
+            echo "TASKPILOT_INTEGRATION_URL=$url"
+            echo "TASKPILOT_API_URL=$url"
+          } >> "$GITHUB_ENV"
+          for ((attempt=1; attempt<=60; attempt++)); do
+            if curl --fail --silent --show-error "$url/health"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API health check did not succeed." >&2
+          exit 1
+      - name: Run integration tests
+        run: |
+          dotnet test src/TaskPilot/TaskPilot.Integration.Tests/TaskPilot.Integration.Tests.csproj \
+            --configuration Release --logger "trx;LogFileName=integration.trx" \
+            --results-directory "$RUNNER_TEMP/taskpilot-results"
+          python -c '
+          import sys
+          import xml.etree.ElementTree as ET
+          counters = ET.parse(sys.argv[1]).find(".//{*}Counters")
+          if counters is None:
+              raise SystemExit("Missing test counters in TRX report")
+          total = int(counters.attrib["total"])
+          passed = int(counters.attrib["passed"])
+          if total == 0 or passed != total:
+              raise SystemExit(f"Integration tests did not all pass: {passed}/{total}")
+          print(f"All {total} integration tests passed.")
+          ' "$RUNNER_TEMP/taskpilot-results/integration.trx"
+      - name: Install Python dependencies
+        run: python -m pip install -r src/taskpilot_client/requirements.txt
+      - name: Run Python client against API
+        working-directory: src/taskpilot_client
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          output="$(python main.py)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | python -c '
+          import os
+          import re
+          import sys
+          import requests
+          output = sys.stdin.read()
+          match = re.search(r"Tarefa criada com sucesso\. ID: (\d+)", output)
+          if not match or "encerrada com sucesso." not in output:
+              raise SystemExit("Python client did not report success")
+          response = requests.get(os.environ["TASKPILOT_API_URL"] + "/api/v1/tasks/summary/1", timeout=10)
+          response.raise_for_status()
+          task = next((item for item in response.json() if item["id"] == int(match.group(1))), None)
+          if not task or task["title"] != "Nova Tarefa Criada pelo Python" or task["status"] != "Concluída" or not task["completedAt"]:
+              raise SystemExit("Python client task was not found and completed")
+          print("Python client task was created and completed.")
+          '
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          if [[ -n "${MSSQL_SA_PASSWORD:-}" ]]; then
+            docker compose logs --no-color
+          fi
+      - name: Remove isolated containers and volume
+        if: always()
+        run: |
+          if [[ -n "${MSSQL_SA_PASSWORD:-}" && -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+            docker compose down --volumes --remove-orphans
+          fi
+
+  migration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test database migrations
+        shell: pwsh
+        run: ./docker/tests/Test-DatabaseMigrations.ps1
