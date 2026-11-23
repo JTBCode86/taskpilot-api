@@ -115,3 +115,22 @@ export async function completeTask(session: Session, id: number, signal: AbortSi
     signal,
   })
 }
+
+export async function updateTask(
+  session: Session, id: number, title: string, description: string, priorityLevel: number, signal: AbortSignal,
+): Promise<void> {
+  await request(`/api/v1/tasks/${id}`, {
+    method: 'PUT',
+    headers: headers(session.accessToken),
+    body: JSON.stringify({ title, description: description || null, priorityLevel }),
+    signal,
+  })
+}
+
+export async function deleteTask(session: Session, id: number, signal: AbortSignal): Promise<void> {
+  await request(`/api/v1/tasks/${id}`, {
+    method: 'DELETE',
+    headers: headers(session.accessToken),
+    signal,
+  })
+}

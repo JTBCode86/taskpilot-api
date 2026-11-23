@@ -45,3 +45,18 @@ Authorization: Bearer {{accessToken}}
 ### Concluir tarefa
 POST {{baseUrl}}/api/v1/tasks/{{taskId}}/complete
 Authorization: Bearer {{accessToken}}
+
+### Editar tarefa
+PUT {{baseUrl}}/api/v1/tasks/{{taskId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Minha tarefa atualizada",
+  "description": "Descrição opcional",
+  "priorityLevel": 2
+}
+
+### Excluir tarefa permanentemente
+DELETE {{baseUrl}}/api/v1/tasks/{{taskId}}
+Authorization: Bearer {{accessToken}}

@@ -141,6 +141,11 @@ select { height: 42px; }
 .pill-done { color: #6c9c77; background: #edf6ee; }
 .priority-label, .task-id { color: #adbbb0; font-size: 10px; }
 .task-id { margin-top: 5px; }
+.task-actions { display: flex; align-items: center; gap: 2px; }
+.delete-confirmation { margin-top: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.delete-confirmation p { margin: 0; color: #9c3e35; }
+.delete-confirmation button { font-size: 12px; }
+.delete-action { color: #9c3e35; }
 .dashboard-footer { display: flex; justify-content: space-between; margin-top: 54px; color: #afbbb1; font-size: 10px; }
 .dashboard-footer > span:last-child { font-weight: 700; letter-spacing: .1em; }
 .footer-star { color: #a2bea2; }

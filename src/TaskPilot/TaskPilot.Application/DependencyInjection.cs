@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TaskPilot.Application.Features.Tasks.Commands.CreateTask;
 using TaskPilot.Application.Features.Tasks.Commands.CompleteTask;
+using TaskPilot.Application.Features.Tasks.Commands.ManageTask;
 using TaskPilot.Application.Features.Tasks.Queries.GetTaskSummary;
 using System.Reflection;
 using MediatR;
@@ -17,6 +18,7 @@ namespace TaskPilot.Application
             // Registra todos os Command Handlers e Query Handlers
             services.AddScoped<CreateTaskCommandHandler>();
             services.AddScoped<CompleteTaskCommandHandler>();
+            services.AddScoped<ManageTaskHandler>();
             services.AddScoped<GetTaskSummaryQueryHandler>();
 
             //Adicionado para teste.

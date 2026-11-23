@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   ArrowDownRight, ArrowRight, Check, CheckCircle2, Circle, ClipboardList, Compass,
-  LayoutGrid, ListTodo, LogOut, Plus, RefreshCw, Sparkles, X,
+  LayoutGrid, ListTodo, LogOut, Pencil, Plus, RefreshCw, Sparkles, Trash2, X,
 } from 'lucide-react'
-import { ApiError, completeTask, createTask, getTasks } from './api'
+import { ApiError, completeTask, createTask, deleteTask, getTasks, updateTask } from './api'
 import type { Session, Task } from './api'
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
 type Filter = 'all' | 'open' | 'done'
 
 const priorityLabels: Record<string, string> = { Low: 'Baixa', Medium: 'Média', High: 'Alta' }
+const priorityValues: Record<string, number> = { Low: 1, Medium: 2, High: 3 }
 
 export function Dashboard({ session, onSignOut }: Props) {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -25,6 +26,8 @@ export function Dashboard({ session, onSignOut }: Props) {
   const [message, setMessage] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [showForm, setShowForm] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState(1)
@@ -87,17 +90,66 @@ export function Dashboard({ session, onSignOut }: Props) {
     setError('')
     setMessage('')
     try {
-      await createTask(session, cleanTitle, description.trim(), priority, controller.signal)
+      if (editingTask) {
+        await updateTask(session, editingTask.id, cleanTitle, description.trim(), priority, controller.signal)
+      } else {
+        await createTask(session, cleanTitle, description.trim(), priority, controller.signal)
+      }
       if (!active.current || controller.signal.aborted) return
       setTitle('')
       setDescription('')
       setPriority(1)
       setShowForm(false)
-      setMessage('Tarefa criada. Um passo de cada vez!')
+      setMessage(editingTask ? 'Tarefa atualizada.' : 'Tarefa criada. Um passo de cada vez!')
+      setEditingTask(null)
       setFilter('all')
       setReload((value) => value + 1)
     } catch (reason) {
-      if (active.current && !controller.signal.aborted) handleError(reason, 'Não foi possível criar a tarefa. Tente novamente.')
+      if (active.current && !controller.signal.aborted) handleError(reason, editingTask ? 'Não foi possível atualizar a tarefa. Tente novamente.' : 'Não foi possível criar a tarefa. Tente novamente.')
+    } finally {
+      if (active.current && !controller.signal.aborted) setWorking(false)
+      if (mutation.current === controller) mutation.current = null
+    }
+  }
+
+  function startEditing(task: Task) {
+    const value = priorityValues[task.priority]
+    if (!value) {
+      setError('Não foi possível editar esta tarefa: prioridade desconhecida.')
+      return
+    }
+    setTitle(task.title)
+    setDescription(task.description ?? '')
+    setPriority(value)
+    setEditingTask(task)
+    setDeletingId(null)
+    setError('')
+    setMessage('')
+    setShowForm(true)
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingTask(null)
+    setTitle('')
+    setDescription('')
+    setPriority(1)
+  }
+
+  async function removeTask(task: Task) {
+    const controller = new AbortController()
+    mutation.current = controller
+    setWorking(true)
+    setError('')
+    setMessage('')
+    try {
+      await deleteTask(session, task.id, controller.signal)
+      if (!active.current || controller.signal.aborted) return
+      setTasks((current) => current.filter((item) => item.id !== task.id))
+      setDeletingId(null)
+      setMessage('Tarefa excluída permanentemente.')
+    } catch (reason) {
+      if (active.current && !controller.signal.aborted) handleError(reason, 'Não foi possível excluir a tarefa. Tente novamente.')
     } finally {
       if (active.current && !controller.signal.aborted) setWorking(false)
       if (mutation.current === controller) mutation.current = null
@@ -161,11 +213,11 @@ export function Dashboard({ session, onSignOut }: Props) {
 
           {showForm && (
             <section className="task-form-card" aria-labelledby="new-task-title">
-              <div className="form-heading"><div><span className="section-kicker">TIRE A IDEIA DA CABEÇA</span><h2 id="new-task-title">Nova tarefa</h2></div><button type="button" className="icon-button" onClick={() => setShowForm(false)} aria-label="Fechar formulário" disabled={working}><X size={20} /></button></div>
+              <div className="form-heading"><div><span className="section-kicker">TIRE A IDEIA DA CABEÇA</span><h2 id="new-task-title">{editingTask ? 'Editar tarefa' : 'Nova tarefa'}</h2></div><button type="button" className="icon-button" onClick={closeForm} aria-label="Fechar formulário" disabled={working}><X size={20} /></button></div>
               <form onSubmit={submitTask}>
                 <label>Título<input autoFocus maxLength={256} placeholder="O que você quer fazer?" value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
                 <label>Descrição <span className="optional">opcional</span><textarea rows={2} placeholder="Adicione algum detalhe..." value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-                <div className="form-actions"><label>Prioridade<select value={priority} onChange={(e) => setPriority(Number(e.target.value))}><option value={1}>Baixa</option><option value={2}>Média</option><option value={3}>Alta</option></select></label><button className="button button-primary" type="submit" disabled={working}>{working ? 'Salvando...' : 'Criar tarefa'} <ArrowRight size={17} /></button></div>
+                <div className="form-actions"><label>Prioridade<select value={priority} onChange={(e) => setPriority(Number(e.target.value))}><option value={1}>Baixa</option><option value={2}>Média</option><option value={3}>Alta</option></select></label><button className="button button-primary" type="submit" disabled={working}>{working ? 'Salvando...' : editingTask ? 'Salvar alterações' : 'Criar tarefa'} <ArrowRight size={17} /></button></div>
               </form>
             </section>
           )}
@@ -185,8 +237,14 @@ export function Dashboard({ session, onSignOut }: Props) {
                   {visible.map((task) => (
                     <li className="task-item" key={task.id}>
                       {task.status === 'Concluída' ? <span className="task-done-icon" aria-label="Concluída"><Check size={16} /></span> : <button type="button" className="complete-button" aria-label={`Concluir ${task.title}`} title={task.status === 'Bloqueada' ? 'Esta tarefa está bloqueada' : 'Concluir tarefa'} disabled={working || task.status === 'Bloqueada'} onClick={() => void markComplete(task)}><Circle size={22} /></button>}
-                      <div className="task-content"><h3 className={task.status === 'Concluída' ? 'task-title-done' : ''}>{task.title}</h3>{task.description && <p>{task.description}</p>}<div className="task-meta"><span className={task.status === 'Concluída' ? 'pill pill-done' : 'pill pill-open'}><span />{task.status}</span><span className="priority-label">Prioridade {priorityLabels[task.priority] || task.priority}</span></div></div>
-                      <span className="task-id">#{task.id}</span>
+                      <div className="task-content"><h3 className={task.status === 'Concluída' ? 'task-title-done' : ''}>{task.title}</h3>{task.description && <p>{task.description}</p>}<div className="task-meta"><span className={task.status === 'Concluída' ? 'pill pill-done' : 'pill pill-open'}><span />{task.status}</span><span className="priority-label">Prioridade {priorityLabels[task.priority] || task.priority}</span></div>
+                        {deletingId === task.id && <div className="delete-confirmation"><p>Excluir esta tarefa permanentemente?</p><button type="button" className="text-button" disabled={working || showForm} onClick={() => setDeletingId(null)}>Cancelar</button><button type="button" className="text-button delete-action" disabled={working || showForm} onClick={() => void removeTask(task)}>Confirmar exclusão</button></div>}
+                      </div>
+                      <div className="task-actions">
+                        <span className="task-id">#{task.id}</span>
+                        <button type="button" className="icon-button" aria-label={`Editar ${task.title}`} disabled={working || showForm} onClick={() => startEditing(task)}><Pencil size={16} /></button>
+                        <button type="button" className="icon-button" aria-label={`Excluir ${task.title}`} disabled={working || showForm} onClick={() => { setDeletingId(task.id); setError(''); setMessage('') }}><Trash2 size={16} /></button>
+                      </div>
                     </li>
                   ))}
                 </ul>

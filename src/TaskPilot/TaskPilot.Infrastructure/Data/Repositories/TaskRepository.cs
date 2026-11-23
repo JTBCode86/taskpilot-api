@@ -6,6 +6,8 @@ using TaskPilot.Domain.Interfaces;
 using TaskPilot.Domain.Entities;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Threading;
+using TaskPilot.Domain.Enums;
 
 namespace TaskPilot.Infrastructure.Data.Repositories
 {
@@ -104,7 +106,8 @@ namespace TaskPilot.Infrastructure.Data.Repositories
         // Implementações omitidas para brevidade: UpdateAsync e DeleteAsync
         public System.Threading.Tasks.Task UpdateAsync(Domain.Entities.Task entity)
         {
-            _context.Tasks.Update(entity);
+            if (_context.Entry(entity).State == EntityState.Detached)
+                _context.Tasks.Update(entity);
             return _context.SaveChangesAsync();
         }
 
@@ -112,6 +115,25 @@ namespace TaskPilot.Infrastructure.Data.Repositories
         {
             // ... busca e remoção
             throw new NotImplementedException();
+        }
+
+        public async Task<bool> UpdateDetailsAsync(int id, int userId, string title, string description, PriorityLevel priority, CancellationToken cancellationToken)
+        {
+            var affected = await _context.Tasks
+                .Where(task => task.Id == id && task.UserId == userId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(task => task.Title, title)
+                    .SetProperty(task => task.Description, description)
+                    .SetProperty(task => task.PriorityLevel, priority), cancellationToken);
+            return affected == 1;
+        }
+
+        public async Task<bool> DeleteOwnedAsync(int id, int userId, CancellationToken cancellationToken)
+        {
+            var affected = await _context.Tasks
+                .Where(task => task.Id == id && task.UserId == userId)
+                .ExecuteDeleteAsync(cancellationToken);
+            return affected == 1;
         }
 
         public async Task<IEnumerable<Domain.Entities.Task>> GetSummaryTasksByUserIdAsync(int userId)

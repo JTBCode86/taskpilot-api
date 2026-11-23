@@ -102,6 +102,60 @@ describe('TaskPilot', () => {
     expect(screen.getByRole('button', { name: /entrar na minha conta/i })).toBeInTheDocument()
   })
 
+  it('edita tarefa concluída e confirma a exclusão permanente', async () => {
+    let task = { id: 21, title: 'Tarefa original', description: 'Detalhes', status: 'Concluída', priority: 'Low', createdAt: '2026-01-01T10:00:00' }
+    let deleted = false
+    const fetchMock = vi.fn(async (path: string, init: RequestInit) => {
+      if (path === '/api/v1/auth/login') return response(session)
+      if (path === '/api/v1/tasks/summary/7') return response(deleted ? [] : [task])
+      if (path === '/api/v1/tasks/21' && init.method === 'PUT') {
+        const body = JSON.parse(String(init.body))
+        task = { ...task, title: body.title, description: body.description, priority: 'High' }
+        return response({ id: 21 })
+      }
+      if (path === '/api/v1/tasks/21' && init.method === 'DELETE') {
+        deleted = true
+        return response(null, 204)
+      }
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+    await signIn(user)
+    await user.click(await screen.findByRole('button', { name: 'Editar Tarefa original' }))
+    await user.clear(screen.getByLabelText('Título'))
+    await user.type(screen.getByLabelText('Título'), 'Tarefa editada')
+    await user.selectOptions(screen.getByLabelText('Prioridade'), '3')
+    await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    expect(await screen.findByText('Tarefa editada')).toBeInTheDocument()
+    const row = screen.getByRole('listitem')
+    expect(within(row).getByText('Concluída')).toBeInTheDocument()
+    expect(within(row).getByText('Prioridade Alta')).toBeInTheDocument()
+    await user.click(within(row).getByRole('button', { name: 'Excluir Tarefa editada' }))
+    await user.click(within(row).getByRole('button', { name: 'Cancelar' }))
+    expect(fetchMock.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(false)
+    await user.click(within(row).getByRole('button', { name: 'Excluir Tarefa editada' }))
+    await user.click(within(row).getByRole('button', { name: 'Confirmar exclusão' }))
+    expect(await screen.findByText('Tarefa excluída permanentemente.')).toBeInTheDocument()
+    expect(screen.queryByText('Tarefa editada')).not.toBeInTheDocument()
+  })
+
+  it('mantém a tarefa e informa erro quando a exclusão falha', async () => {
+    const task = { id: 21, title: 'Tarefa preservada', description: null, status: 'Pendente', priority: 'Low', createdAt: '2026-01-01T10:00:00' }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(response(session))
+      .mockResolvedValueOnce(response([task]))
+      .mockResolvedValueOnce(response({}, 500)))
+    const user = userEvent.setup()
+    render(<App />)
+    await signIn(user)
+    await user.click(await screen.findByRole('button', { name: 'Excluir Tarefa preservada' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar exclusão' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível excluir')
+    expect(screen.getByText('Tarefa preservada')).toBeInTheDocument()
+  })
+
   it('exibe erro e permite tentar novamente quando a lista falha', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(response(session))

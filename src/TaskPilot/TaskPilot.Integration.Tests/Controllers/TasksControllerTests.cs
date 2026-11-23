@@ -82,6 +82,58 @@ namespace TaskPilot.Integration.Tests.Controllers
             Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
         }
 
+        [TestMethod]
+        public async Task UpdateAndDeleteCompletedTask_PreservesCompletionAndRemovesTask()
+        {
+            using var session = await CreateSession();
+            var client = session.Client;
+            var create = await client.PostAsJsonAsync("/api/v1/tasks", new { title = "Original" });
+            Assert.AreEqual(HttpStatusCode.Created, create.StatusCode);
+            var id = await create.Content.ReadFromJsonAsync<int>();
+            Assert.AreEqual(HttpStatusCode.NoContent, (await client.PostAsync($"/api/v1/tasks/{id}/complete", null)).StatusCode);
+            var before = await client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{session.UserId}");
+            var completedAt = before.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id).GetProperty("completedAt").GetString();
+
+            var update = await client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Atualizada", description = "Detalhes", priorityLevel = 3 });
+            Assert.AreEqual(HttpStatusCode.OK, update.StatusCode, await update.Content.ReadAsStringAsync());
+            var updatedResponse = await update.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.AreEqual(id, updatedResponse.GetProperty("id").GetInt32());
+            var summary = await client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{session.UserId}");
+            var task = summary.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id);
+            Assert.AreEqual("Atualizada", task.GetProperty("title").GetString());
+            Assert.AreEqual("Detalhes", task.GetProperty("description").GetString());
+            Assert.AreEqual("High", task.GetProperty("priority").GetString());
+            Assert.AreEqual("Concluída", task.GetProperty("status").GetString());
+            Assert.IsNotNull(completedAt);
+            Assert.AreEqual(completedAt, task.GetProperty("completedAt").GetString());
+
+            Assert.AreEqual(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/v1/tasks/{id}")).StatusCode);
+            Assert.AreEqual(HttpStatusCode.NotFound, (await client.DeleteAsync($"/api/v1/tasks/{id}")).StatusCode);
+            Assert.AreEqual(HttpStatusCode.NotFound, (await client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Nova", priorityLevel = 1 })).StatusCode);
+            var after = await client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{session.UserId}");
+            Assert.IsFalse(after.EnumerateArray().Any(item => item.GetProperty("id").GetInt32() == id));
+        }
+
+        [TestMethod]
+        public async Task UpdateTask_RejectsInvalidTitleAndPriority()
+        {
+            using var session = await CreateSession();
+            var create = await session.Client.PostAsJsonAsync("/api/v1/tasks", new { title = "Original" });
+            Assert.AreEqual(HttpStatusCode.Created, create.StatusCode);
+            var id = await create.Content.ReadFromJsonAsync<int>();
+            Assert.AreEqual(HttpStatusCode.BadRequest, (await session.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "   ", priorityLevel = 1 })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.BadRequest, (await session.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = new string('a', 257), priorityLevel = 1 })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.BadRequest, (await session.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Válida", priorityLevel = 4 })).StatusCode);
+            var summary = await session.Client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{session.UserId}");
+            Assert.AreEqual("Original", summary.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id).GetProperty("title").GetString());
+            var maximumTitle = new string('a', 256);
+            Assert.AreEqual(HttpStatusCode.OK, (await session.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = maximumTitle, description = (string)null, priorityLevel = 1 })).StatusCode);
+            summary = await session.Client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{session.UserId}");
+            var updated = summary.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id);
+            Assert.AreEqual(maximumTitle, updated.GetProperty("title").GetString());
+            Assert.AreEqual(JsonValueKind.Null, updated.GetProperty("description").ValueKind);
+        }
+
         [DataTestMethod]
         [DataRow(null)]
         [DataRow("")]
@@ -131,6 +183,8 @@ namespace TaskPilot.Integration.Tests.Controllers
         {
             using var client = CreateClient();
             Assert.AreEqual(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/tasks/summary/1")).StatusCode);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, (await client.PutAsJsonAsync("/api/v1/tasks/1", new { title = "Alterada", priorityLevel = 1 })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, (await client.DeleteAsync("/api/v1/tasks/1")).StatusCode);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid.token.value");
             Assert.AreEqual(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/tasks/summary/1")).StatusCode);
             using var session = await CreateSession();
@@ -156,11 +210,14 @@ namespace TaskPilot.Integration.Tests.Controllers
             Assert.AreEqual(HttpStatusCode.Forbidden, forged.StatusCode);
             Assert.AreEqual(HttpStatusCode.Forbidden, (await other.Client.GetAsync($"/api/v1/tasks/summary/{owner.UserId}")).StatusCode);
             Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.PostAsync($"/api/v1/tasks/{id}/complete", null)).StatusCode);
+            Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Alterada", priorityLevel = 1 })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.DeleteAsync($"/api/v1/tasks/{id}")).StatusCode);
             var otherSummary = await other.Client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{other.UserId}");
             Assert.IsFalse(otherSummary.EnumerateArray().Any(item => item.GetProperty("id").GetInt32() == id));
             var summary = await owner.Client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{owner.UserId}");
             var task = summary.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id);
             Assert.AreEqual("Pendente", task.GetProperty("status").GetString());
+            Assert.AreEqual("Private task", task.GetProperty("title").GetString());
         }
 
         [TestMethod]
@@ -192,6 +249,9 @@ namespace TaskPilot.Integration.Tests.Controllers
             Assert.IsFalse(register.TryGetProperty("security", out var registerSecurity) && registerSecurity.GetArrayLength() > 0);
             var tasks = paths.GetProperty("/api/v1/Tasks").GetProperty("post");
             Assert.IsTrue(tasks.GetProperty("security").GetArrayLength() > 0);
+            var taskById = paths.GetProperty("/api/v1/Tasks/{taskId}");
+            Assert.IsTrue(taskById.GetProperty("put").GetProperty("security").GetArrayLength() > 0);
+            Assert.IsTrue(taskById.GetProperty("delete").GetProperty("security").GetArrayLength() > 0);
             var me = paths.GetProperty("/api/v1/auth/me").GetProperty("get");
             Assert.IsTrue(me.GetProperty("security").GetArrayLength() > 0);
         }

@@ -3,11 +3,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using TaskPilot.Application.Features.Tasks.Commands.CreateTask;
 using TaskPilot.Application.Features.Tasks.Commands.CompleteTask;
+using TaskPilot.Application.Features.Tasks.Commands.ManageTask;
 using TaskPilot.Application.Features.Tasks.Queries.GetTaskSummary;
+using TaskPilot.Domain.Enums;
 using TaskPilot.Domain.Exceptions;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authorization;
+using System.Threading;
 
 namespace TaskPilot.API.Controllers
 {
@@ -20,15 +23,18 @@ namespace TaskPilot.API.Controllers
         private readonly CreateTaskCommandHandler _createTaskHandler;
         private readonly CompleteTaskCommandHandler _completeTaskHandler;
         private readonly GetTaskSummaryQueryHandler _getSummaryHandler;
+        private readonly ManageTaskHandler _manageTaskHandler;
 
         public TasksController(
             CreateTaskCommandHandler createTaskHandler,
             CompleteTaskCommandHandler completeTaskHandler,
-            GetTaskSummaryQueryHandler getSummaryHandler)
+            GetTaskSummaryQueryHandler getSummaryHandler,
+            ManageTaskHandler manageTaskHandler)
         {
             _createTaskHandler = createTaskHandler;
             _completeTaskHandler = completeTaskHandler;
             _getSummaryHandler = getSummaryHandler;
+            _manageTaskHandler = manageTaskHandler;
         }
 
         // POST api/v1/tasks
@@ -100,6 +106,27 @@ namespace TaskPilot.API.Controllers
                 return BadRequest(new { Message = ex.Message }); // 400 Bad Request
             }
 
+        }
+
+        /// <summary>Atualiza título, descrição e prioridade de uma tarefa própria.</summary>
+        [HttpPut("{taskId}")]
+        [ProducesResponseType(typeof(UpdatedTaskResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateTask(int taskId, [FromBody] UpdateTaskRequest request, CancellationToken cancellationToken)
+        {
+            var updated = await _manageTaskHandler.Update(taskId, CurrentUserId(), request.Title, request.Description,
+                (PriorityLevel)request.PriorityLevel, cancellationToken);
+            return updated ? Ok(new UpdatedTaskResponse(taskId)) : NotFound();
+        }
+
+        /// <summary>Exclui permanentemente uma tarefa própria.</summary>
+        [HttpDelete("{taskId}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> DeleteTask(int taskId, CancellationToken cancellationToken)
+        {
+            return await _manageTaskHandler.Delete(taskId, CurrentUserId(), cancellationToken) ? NoContent() : NotFound();
         }
 
         private int CurrentUserId() => int.Parse(User.FindFirst("sub")!.Value);
