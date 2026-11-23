@@ -67,7 +67,7 @@ flowchart LR
 
 ![Fluxo animado de uma consulta de tarefas](docs/fluxo-dados.gif)
 
-No exemplo simplificado, o navegador solicita as tarefas pela interface, e o proxy do Vite encaminha a requisição `/api` à API. Após a validação do JWT, a aplicação solicita os dados ao repositório na infraestrutura, que consulta o SQL Server. A resposta retorna pelo caminho inverso e a interface exibe as tarefas.
+No exemplo simplificado, o navegador solicita as tarefas pela interface, e o proxy do Vite encaminha a requisição `/api` à API. Após a validação do JWT, a aplicação solicita os dados ao repositório na infraestrutura, que consulta o SQL Server. A resposta retorna pelo caminho inverso; a interface exibe os prazos e identifica tarefas em aberto atrasadas.
 
 ## 📁Estrutura
 
@@ -86,7 +86,7 @@ No exemplo simplificado, o navegador solicita as tarefas pela interface, e o pro
 
 ![Demonstração do TaskPilot](docs/demo.gif)
 
-A demonstração apresenta cadastro, login e gerenciamento de tarefas com dados fictícios.
+A demonstração apresenta cadastro, login, gerenciamento de tarefas e criação, alteração e remoção de prazos com dados fictícios.
 
 ## ▶Como executar
 
