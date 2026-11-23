@@ -1,9 +1,18 @@
 # infrastructure/api_adapter.py (ATUALIZADO)
 
 import requests
+import re
 from datetime import datetime
 from domain.entities import ITaskRepository, Task, CreateTaskCommand
 from typing import List
+
+def _parse_api_datetime(value: str) -> datetime:
+    normalized = re.sub(
+        r"\.(\d+)(?=Z|[+-]|$)",
+        lambda match: "." + match.group(1)[:6].ljust(6, "0"),
+        value,
+    )
+    return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
 
 class TaskApiAdapter(ITaskRepository):
     """Implementação do Repositório que interage com a API RESTful."""
@@ -38,8 +47,8 @@ class TaskApiAdapter(ITaskRepository):
                     id=item['id'],
                     title=item['title'],
                     description=item.get('description'),
-                    created_at=datetime.fromisoformat(item['createdAt'].replace('Z', '+00:00')),
-                    due_date=datetime.fromisoformat(item['dueDate'].replace('Z', '+00:00')) if item.get('dueDate') else None,
+                    created_at=_parse_api_datetime(item['createdAt']),
+                    due_date=_parse_api_datetime(item['dueDate']) if item.get('dueDate') else None,
                     #is_completed=item['isCompleted'],
                     is_completed=is_completed_value,
                     #user_id=item['userId']
