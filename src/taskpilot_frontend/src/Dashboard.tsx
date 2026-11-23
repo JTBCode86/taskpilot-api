@@ -17,6 +17,10 @@ type Filter = 'all' | 'open' | 'done'
 const priorityLabels: Record<string, string> = { Low: 'Baixa', Medium: 'Média', High: 'Alta' }
 const priorityValues: Record<string, number> = { Low: 1, Medium: 2, High: 3 }
 
+function localDate(date: Date): string {
+  return `${date.getFullYear().toString().padStart(4, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`
+}
+
 export function Dashboard({ session, onSignOut }: Props) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,10 +35,16 @@ export function Dashboard({ session, onSignOut }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState(1)
+  const [dueDate, setDueDate] = useState('')
   const [reload, setReload] = useState(0)
-  const [today] = useState(() => new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()))
+  const [now, setNow] = useState(() => new Date())
   const mutation = useRef<AbortController | null>(null)
   const active = useRef(true)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const handleError = useCallback((reason: unknown, fallback: string) => {
     if (reason instanceof ApiError && reason.status === 401) {
@@ -90,15 +100,18 @@ export function Dashboard({ session, onSignOut }: Props) {
     setError('')
     setMessage('')
     try {
+      const deadline = dueDate ? `${dueDate}T23:59:59.9999999` : null
       if (editingTask) {
-        await updateTask(session, editingTask.id, cleanTitle, description.trim(), priority, controller.signal)
+        const unchanged = dueDate === (editingTask.dueDate?.slice(0, 10) ?? '')
+        await updateTask(session, editingTask.id, cleanTitle, description.trim(), priority, unchanged ? undefined : deadline, controller.signal)
       } else {
-        await createTask(session, cleanTitle, description.trim(), priority, controller.signal)
+        await createTask(session, cleanTitle, description.trim(), priority, deadline, controller.signal)
       }
       if (!active.current || controller.signal.aborted) return
       setTitle('')
       setDescription('')
       setPriority(1)
+      setDueDate('')
       setShowForm(false)
       setMessage(editingTask ? 'Tarefa atualizada.' : 'Tarefa criada. Um passo de cada vez!')
       setEditingTask(null)
@@ -121,6 +134,7 @@ export function Dashboard({ session, onSignOut }: Props) {
     setTitle(task.title)
     setDescription(task.description ?? '')
     setPriority(value)
+    setDueDate(task.dueDate?.slice(0, 10) ?? '')
     setEditingTask(task)
     setDeletingId(null)
     setError('')
@@ -134,6 +148,7 @@ export function Dashboard({ session, onSignOut }: Props) {
     setTitle('')
     setDescription('')
     setPriority(1)
+    setDueDate('')
   }
 
   async function removeTask(task: Task) {
@@ -179,6 +194,8 @@ export function Dashboard({ session, onSignOut }: Props) {
   const open = tasks.length - completed
   const visible = [...tasks].reverse().filter((task) => filter === 'all' || (filter === 'done' ? task.status === 'Concluída' : task.status !== 'Concluída'))
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0
+  const today = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).format(now)
+  const todayDate = localDate(now)
 
   return (
     <div className="app-shell">
@@ -217,6 +234,7 @@ export function Dashboard({ session, onSignOut }: Props) {
               <form onSubmit={submitTask}>
                 <label>Título<input autoFocus maxLength={256} placeholder="O que você quer fazer?" value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
                 <label>Descrição <span className="optional">opcional</span><textarea rows={2} placeholder="Adicione algum detalhe..." value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+                <label>Prazo <span className="optional">opcional</span><input type="date" min="0001-01-01" max="9999-12-31" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
                 <div className="form-actions"><label>Prioridade<select value={priority} onChange={(e) => setPriority(Number(e.target.value))}><option value={1}>Baixa</option><option value={2}>Média</option><option value={3}>Alta</option></select></label><button className="button button-primary" type="submit" disabled={working}>{working ? 'Salvando...' : editingTask ? 'Salvar alterações' : 'Criar tarefa'} <ArrowRight size={17} /></button></div>
               </form>
             </section>
@@ -237,7 +255,7 @@ export function Dashboard({ session, onSignOut }: Props) {
                   {visible.map((task) => (
                     <li className="task-item" key={task.id}>
                       {task.status === 'Concluída' ? <span className="task-done-icon" aria-label="Concluída"><Check size={16} /></span> : <button type="button" className="complete-button" aria-label={`Concluir ${task.title}`} title={task.status === 'Bloqueada' ? 'Esta tarefa está bloqueada' : 'Concluir tarefa'} disabled={working || task.status === 'Bloqueada'} onClick={() => void markComplete(task)}><Circle size={22} /></button>}
-                      <div className="task-content"><h3 className={task.status === 'Concluída' ? 'task-title-done' : ''}>{task.title}</h3>{task.description && <p>{task.description}</p>}<div className="task-meta"><span className={task.status === 'Concluída' ? 'pill pill-done' : 'pill pill-open'}><span />{task.status}</span><span className="priority-label">Prioridade {priorityLabels[task.priority] || task.priority}</span></div>
+                      <div className="task-content"><h3 className={task.status === 'Concluída' ? 'task-title-done' : ''}>{task.title}</h3>{task.description && <p>{task.description}</p>}<div className="task-meta"><span className={task.status === 'Concluída' ? 'pill pill-done' : 'pill pill-open'}><span />{task.status}</span><span className="priority-label">Prioridade {priorityLabels[task.priority] || task.priority}</span>{task.dueDate && <span className={task.status !== 'Concluída' && task.dueDate.slice(0, 10) < todayDate ? 'due-date overdue' : 'due-date'}>Prazo: {task.dueDate.slice(0, 10).split('-').reverse().join('/')}{task.status !== 'Concluída' && task.dueDate.slice(0, 10) < todayDate && ' · Atrasada'}</span>}</div>
                         {deletingId === task.id && <div className="delete-confirmation"><p>Excluir esta tarefa permanentemente?</p><button type="button" className="text-button" disabled={working || showForm} onClick={() => setDeletingId(null)}>Cancelar</button><button type="button" className="text-button delete-action" disabled={working || showForm} onClick={() => void removeTask(task)}>Confirmar exclusão</button></div>}
                       </div>
                       <div className="task-actions">

@@ -35,7 +35,8 @@ Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "title": "Minha tarefa"
+  "title": "Minha tarefa",
+  "dueDate": "2030-12-31T23:59:59.9999999"
 }
 
 ### Consultar tarefas
@@ -54,7 +55,19 @@ Content-Type: application/json
 {
   "title": "Minha tarefa atualizada",
   "description": "Descrição opcional",
-  "priorityLevel": 2
+  "priorityLevel": 2,
+  "dueDate": "2031-01-15T23:59:59.9999999"
+}
+
+### Remover prazo (omitir dueDate mantém o prazo existente)
+PUT {{baseUrl}}/api/v1/tasks/{{taskId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Minha tarefa atualizada",
+  "priorityLevel": 2,
+  "dueDate": null
 }
 
 ### Excluir tarefa permanentemente

@@ -48,13 +48,13 @@ describe('TaskPilot', () => {
   })
 
   it('entra, cria e conclui tarefa, filtra e sai sem persistir o token', async () => {
-    const tasks: Array<{ id: number; title: string; description: string | null; status: string; priority: string; createdAt: string }> = []
+    const tasks: Array<{ id: number; title: string; description: string | null; status: string; priority: string; createdAt: string; dueDate: string | null }> = []
     const fetchMock = vi.fn(async (path: string, init: RequestInit) => {
       if (path === '/api/v1/auth/login') return response(session)
       if (path === '/api/v1/tasks/summary/7') return response(tasks)
       if (path === '/api/v1/tasks' && init.method === 'POST') {
         const body = JSON.parse(String(init.body))
-        tasks.push({ id: 21, title: body.title, description: body.description, status: 'Pendente', priority: 'Medium', createdAt: '2026-01-01T10:00:00' })
+        tasks.push({ id: 21, title: body.title, description: body.description, status: 'Pendente', priority: 'Medium', createdAt: '2026-01-01T10:00:00', dueDate: body.dueDate })
         return response(21, 201)
       }
       if (path === '/api/v1/tasks/21/complete') return response(null, 204)
@@ -77,7 +77,7 @@ describe('TaskPilot', () => {
     const createCall = fetchMock.mock.calls.find(([path]) => path === '/api/v1/tasks')
     expect(createCall).toBeDefined()
     expect(createCall?.[1].headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer test-token' })
-    expect(JSON.parse(String(createCall?.[1].body))).toEqual({ title: 'Planejar a semana', description: 'Definir prioridades', priorityLevel: 2 })
+    expect(JSON.parse(String(createCall?.[1].body))).toEqual({ title: 'Planejar a semana', description: 'Definir prioridades', priorityLevel: 2, dueDate: null })
 
     await user.click(within(task).getByRole('button', { name: 'Concluir Planejar a semana' }))
     expect(await within(task).findByText('Concluída')).toBeInTheDocument()
@@ -103,7 +103,7 @@ describe('TaskPilot', () => {
   })
 
   it('edita tarefa concluída e confirma a exclusão permanente', async () => {
-    let task = { id: 21, title: 'Tarefa original', description: 'Detalhes', status: 'Concluída', priority: 'Low', createdAt: '2026-01-01T10:00:00' }
+    let task = { id: 21, title: 'Tarefa original', description: 'Detalhes', status: 'Concluída', priority: 'Low', createdAt: '2026-01-01T10:00:00', dueDate: null }
     let deleted = false
     const fetchMock = vi.fn(async (path: string, init: RequestInit) => {
       if (path === '/api/v1/auth/login') return response(session)
@@ -142,7 +142,7 @@ describe('TaskPilot', () => {
   })
 
   it('mantém a tarefa e informa erro quando a exclusão falha', async () => {
-    const task = { id: 21, title: 'Tarefa preservada', description: null, status: 'Pendente', priority: 'Low', createdAt: '2026-01-01T10:00:00' }
+    const task = { id: 21, title: 'Tarefa preservada', description: null, status: 'Pendente', priority: 'Low', createdAt: '2026-01-01T10:00:00', dueDate: null }
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(response(session))
       .mockResolvedValueOnce(response([task]))
@@ -169,5 +169,77 @@ describe('TaskPilot', () => {
     await user.click(screen.getByRole('button', { name: 'Atualizar' }))
     expect(await screen.findByText('Uma página em branco.')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('cria, edita e remove prazo e destaca apenas tarefas em aberto após a data', async () => {
+    let task = { id: 21, title: 'Com prazo', description: null, status: 'Pendente', priority: 'Low', createdAt: '2026-01-01T10:00:00', dueDate: null as string | null }
+    const fetchMock = vi.fn(async (path: string, init: RequestInit) => {
+      if (path === '/api/v1/auth/login') return response(session)
+      if (path === '/api/v1/tasks/summary/7') return response([task])
+      if (path === '/api/v1/tasks' && init.method === 'POST') {
+        task = { ...task, dueDate: JSON.parse(String(init.body)).dueDate }
+        return response(21, 201)
+      }
+      if (path === '/api/v1/tasks/21' && init.method === 'PUT') {
+        const body = JSON.parse(String(init.body))
+        if ('dueDate' in body) task = { ...task, dueDate: body.dueDate }
+        return response({ id: 21 })
+      }
+      if (path === '/api/v1/tasks/21/complete') return response(null, 204)
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+    await signIn(user)
+    await user.click(await screen.findByRole('button', { name: /nova tarefa/i }))
+    await user.type(screen.getByLabelText('Título'), 'Com prazo')
+    await user.type(screen.getByLabelText(/Prazo/), '2000-01-01')
+    await user.click(screen.getByRole('button', { name: 'Criar tarefa' }))
+    expect(await screen.findByText('Prazo: 01/01/2000 · Atrasada')).toBeInTheDocument()
+    expect(task.dueDate).toBe('2000-01-01T23:59:59.9999999')
+    await user.click(screen.getByRole('button', { name: 'Editar Com prazo' }))
+    await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    await screen.findByText('Tarefa atualizada.')
+    const updates = () => fetchMock.mock.calls.filter(([path, init]) => path === '/api/v1/tasks/21' && init.method === 'PUT')
+    expect(JSON.parse(String(updates()[0][1].body))).not.toHaveProperty('dueDate')
+    await user.click(screen.getByRole('button', { name: 'Editar Com prazo' }))
+    await user.clear(screen.getByLabelText(/Prazo/))
+    await user.type(screen.getByLabelText(/Prazo/), '2099-12-31')
+    await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    expect(await screen.findByText('Prazo: 31/12/2099')).toBeInTheDocument()
+    expect(task.dueDate).toBe('2099-12-31T23:59:59.9999999')
+    await user.click(screen.getByRole('button', { name: 'Editar Com prazo' }))
+    await user.clear(screen.getByLabelText(/Prazo/))
+    await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    await waitFor(() => expect(task.dueDate).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/Prazo:/)).not.toBeInTheDocument())
+  })
+
+  it('não destaca como atrasada tarefa concluída com prazo passado', async () => {
+    const task = { id: 21, title: 'Concluída', description: null, status: 'Concluída', priority: 'Low', createdAt: '2026-01-01T10:00:00', dueDate: '2000-01-01T12:00:00' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(session)).mockResolvedValueOnce(response([task])))
+    const user = userEvent.setup()
+    render(<App />)
+    await signIn(user)
+    expect(await screen.findByText('Prazo: 01/01/2000')).toBeInTheDocument()
+    expect(screen.queryByText(/Atrasada/)).not.toBeInTheDocument()
+  })
+
+  it('não destaca prazo de hoje ou futuro como atrasado', async () => {
+    const formatDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const today = new Date()
+    const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+    const task = { description: null, status: 'Pendente', priority: 'Low', createdAt: '2026-01-01T10:00:00' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(session)).mockResolvedValueOnce(response([
+      { ...task, id: 21, title: 'Hoje', dueDate: `${formatDate(today)}T23:59:59` },
+      { ...task, id: 22, title: 'Amanhã', dueDate: `${formatDate(tomorrow)}T23:59:59` },
+    ])))
+    const user = userEvent.setup()
+    render(<App />)
+    await signIn(user)
+    expect(await screen.findByText('Hoje')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.queryByText(/Atrasada/)).not.toBeInTheDocument()
   })
 })

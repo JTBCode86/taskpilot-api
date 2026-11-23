@@ -115,6 +115,31 @@ namespace TaskPilot.Integration.Tests.Controllers
         }
 
         [TestMethod]
+        public async Task DueDate_CanBeSetPreservedChangedAndRemoved()
+        {
+            using var session = await CreateSession();
+            var client = session.Client;
+            var create = await client.PostAsJsonAsync("/api/v1/tasks", new { title = "Prazo", dueDate = "2000-01-01T23:59:59.9999999" });
+            Assert.AreEqual(HttpStatusCode.Created, create.StatusCode, await create.Content.ReadAsStringAsync());
+            var id = await create.Content.ReadFromJsonAsync<int>();
+
+            async Task<JsonElement> GetTask()
+            {
+                var summary = await client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{session.UserId}");
+                return summary.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id);
+            }
+
+            Assert.AreEqual(new DateTime(2000, 1, 1, 23, 59, 59).AddTicks(9999999), (await GetTask()).GetProperty("dueDate").GetDateTime());
+            Assert.AreEqual(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Sem alteração", priorityLevel = 1 })).StatusCode);
+            Assert.AreEqual(new DateTime(2000, 1, 1, 23, 59, 59).AddTicks(9999999), (await GetTask()).GetProperty("dueDate").GetDateTime());
+            Assert.AreEqual(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Novo prazo", priorityLevel = 1, dueDate = "2099-12-31T23:59:59.9999999" })).StatusCode);
+            Assert.AreEqual(new DateTime(2099, 12, 31, 23, 59, 59).AddTicks(9999999), (await GetTask()).GetProperty("dueDate").GetDateTime());
+            Assert.AreEqual(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Inválida", priorityLevel = 1, dueDate = "invalid" })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Sem prazo", priorityLevel = 1, dueDate = (string)null })).StatusCode);
+            Assert.AreEqual(JsonValueKind.Null, (await GetTask()).GetProperty("dueDate").ValueKind);
+        }
+
+        [TestMethod]
         public async Task UpdateTask_RejectsInvalidTitleAndPriority()
         {
             using var session = await CreateSession();
@@ -202,7 +227,7 @@ namespace TaskPilot.Integration.Tests.Controllers
         {
             using var owner = await CreateSession();
             using var other = await CreateSession();
-            var created = await owner.Client.PostAsJsonAsync("/api/v1/tasks", new { title = "Private task" });
+            var created = await owner.Client.PostAsJsonAsync("/api/v1/tasks", new { title = "Private task", dueDate = "2030-01-01T23:59:59" });
             Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
             var id = await created.Content.ReadFromJsonAsync<int>();
 
@@ -210,7 +235,7 @@ namespace TaskPilot.Integration.Tests.Controllers
             Assert.AreEqual(HttpStatusCode.Forbidden, forged.StatusCode);
             Assert.AreEqual(HttpStatusCode.Forbidden, (await other.Client.GetAsync($"/api/v1/tasks/summary/{owner.UserId}")).StatusCode);
             Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.PostAsync($"/api/v1/tasks/{id}/complete", null)).StatusCode);
-            Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Alterada", priorityLevel = 1 })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.PutAsJsonAsync($"/api/v1/tasks/{id}", new { title = "Alterada", priorityLevel = 1, dueDate = (string)null })).StatusCode);
             Assert.AreEqual(HttpStatusCode.NotFound, (await other.Client.DeleteAsync($"/api/v1/tasks/{id}")).StatusCode);
             var otherSummary = await other.Client.GetFromJsonAsync<JsonElement>($"/api/v1/tasks/summary/{other.UserId}");
             Assert.IsFalse(otherSummary.EnumerateArray().Any(item => item.GetProperty("id").GetInt32() == id));
@@ -218,6 +243,7 @@ namespace TaskPilot.Integration.Tests.Controllers
             var task = summary.EnumerateArray().Single(item => item.GetProperty("id").GetInt32() == id);
             Assert.AreEqual("Pendente", task.GetProperty("status").GetString());
             Assert.AreEqual("Private task", task.GetProperty("title").GetString());
+            Assert.AreEqual(new DateTime(2030, 1, 1, 23, 59, 59), task.GetProperty("dueDate").GetDateTime());
         }
 
         [TestMethod]

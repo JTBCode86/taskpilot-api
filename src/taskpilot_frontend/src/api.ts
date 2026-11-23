@@ -11,6 +11,7 @@ export type Task = {
   status: string
   priority: string
   createdAt: string
+  dueDate: string | null
 }
 
 export type Registration = {
@@ -47,7 +48,8 @@ function isTask(value: unknown): value is Task {
     (typeof value.description === 'string' || value.description === null) &&
     typeof value.status === 'string' &&
     typeof value.priority === 'string' &&
-    typeof value.createdAt === 'string'
+    typeof value.createdAt === 'string' &&
+    (value.dueDate === null || (typeof value.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value.dueDate) && Number.isFinite(Date.parse(value.dueDate))))
 }
 
 async function request(path: string, init: RequestInit): Promise<unknown> {
@@ -95,12 +97,13 @@ export async function createTask(
   title: string,
   description: string,
   priorityLevel: number,
+  dueDate: string | null,
   signal: AbortSignal,
 ): Promise<void> {
   const result = await request('/api/v1/tasks', {
     method: 'POST',
     headers: headers(session.accessToken),
-    body: JSON.stringify({ title, description: description || null, priorityLevel }),
+    body: JSON.stringify({ title, description: description || null, priorityLevel, dueDate }),
     signal,
   })
   if (typeof result !== 'number' || !Number.isInteger(result) || result <= 0) {
@@ -117,12 +120,12 @@ export async function completeTask(session: Session, id: number, signal: AbortSi
 }
 
 export async function updateTask(
-  session: Session, id: number, title: string, description: string, priorityLevel: number, signal: AbortSignal,
+  session: Session, id: number, title: string, description: string, priorityLevel: number, dueDate: string | null | undefined, signal: AbortSignal,
 ): Promise<void> {
   await request(`/api/v1/tasks/${id}`, {
     method: 'PUT',
     headers: headers(session.accessToken),
-    body: JSON.stringify({ title, description: description || null, priorityLevel }),
+    body: JSON.stringify({ title, description: description || null, priorityLevel, dueDate }),
     signal,
   })
 }

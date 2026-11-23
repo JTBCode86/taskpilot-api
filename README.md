@@ -27,7 +27,9 @@ O TaskPilot é um projeto didático de gerenciamento de tarefas, com API em ASP.
 
 Para criar uma tarefa, autentique-se e informe um título não vazio com até 256 caracteres. A tarefa pertence ao usuário do token; um título inválido retorna HTTP 400.
 
-Tarefas próprias podem ser editadas (título, descrição e prioridade) ou excluídas permanentemente. A edição não altera o status nem a data de conclusão, inclusive em tarefas concluídas. A interface solicita confirmação antes de excluir.
+Tarefas próprias podem ser editadas (título, descrição, prioridade e prazo) ou excluídas permanentemente. A edição não altera o status nem a data de conclusão, inclusive em tarefas concluídas. A interface solicita confirmação antes de excluir.
+
+O prazo é opcional e pode ser definido, alterado ou removido. Na interface, a data vale até o fim do dia no calendário local; tarefas em aberto com data anterior à data local aparecem como atrasadas. Datas passadas são permitidas e tarefas concluídas não são destacadas como atrasadas.
 
 ## 📋Pré-requisitos
 
@@ -189,7 +191,7 @@ Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastNa
 
 O token expira em 30 minutos. Cada usuário só pode consultar e concluir suas próprias tarefas; o `userId` opcional na criação deve corresponder ao token. Credenciais inválidas ou token ausente retornam 401; tentativas de acesso ao resumo ou criação para outro usuário retornam 403, e a conclusão de uma tarefa de outro usuário retorna 404. Alterar a chave JWT ou a senha invalida os tokens anteriores.
 
-Use `PUT /api/v1/tasks/{taskId}` com `title`, `description` e `priorityLevel` (1 a 3) para editar: a resposta é HTTP 200 com o identificador atualizado. `DELETE /api/v1/tasks/{taskId}` exclui a tarefa e retorna HTTP 204. Tarefas inexistentes ou de outro usuário retornam 404 em ambas as operações; a exclusão também remove os vínculos de categorias da tarefa.
+Use `PUT /api/v1/tasks/{taskId}` com `title`, `description` e `priorityLevel` (1 a 3) para editar: a resposta é HTTP 200 com o identificador atualizado. O campo opcional `dueDate` aceita uma data e hora ISO 8601; omiti-lo preserva o prazo, enquanto `null` o remove. A interface envia a data escolhida às 23:59:59.9999999 sem fuso e usa a data armazenada como data de calendário, inclusive para prazos criados por outros clientes. `DELETE /api/v1/tasks/{taskId}` exclui a tarefa e retorna HTTP 204. Tarefas inexistentes ou de outro usuário retornam 404 em ambas as operações; a exclusão também remove os vínculos de categorias da tarefa.
 
 O usuário de demonstração existente continua sem senha utilizável e suas tarefas são preservadas. Para recuperar o acesso, com os containers em execução, use o comando administrativo local abaixo e digite a nova senha duas vezes. Ele exige acesso ao banco pelo Compose e não cria uma rota pública de recuperação:
 
@@ -268,7 +270,6 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 
 Ideias para evolução do projeto:
 
-1. **Prazos:** a API já aceita uma data de vencimento na criação; disponibilizar sua definição na interface e sua edição na API e na interface, destacar tarefas atrasadas e testar as regras de data.
-2. **Organização:** explorar filtros e ordenação por prazo e prioridade.
-3. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
-4. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
+1. **Organização:** explorar filtros e ordenação por prazo e prioridade.
+2. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
+3. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.

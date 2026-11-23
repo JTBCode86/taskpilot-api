@@ -47,7 +47,7 @@ namespace TaskPilot.Infrastructure.Data.Repositories
                     command.Parameters.Add(new SqlParameter("@Description", (object)task.Description ?? DBNull.Value));
                     command.Parameters.Add(new SqlParameter("@PriorityLevel", (int)task.PriorityLevel));
                     command.Parameters.Add(new SqlParameter("@EstimatedDuration", (object)task.EstimatedDuration ?? DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@DueDate", (object)task.DueDate ?? DBNull.Value));
+                    command.Parameters.Add(new SqlParameter("@DueDate", System.Data.SqlDbType.DateTime2) { Value = (object)task.DueDate ?? DBNull.Value });
 
                     // 2. Executar e Ler o Resultado
                     // Assumimos que a SP usa SELECT SCOPE_IDENTITY() AS NewTaskId; para retornar o ID.
@@ -117,14 +117,15 @@ namespace TaskPilot.Infrastructure.Data.Repositories
             throw new NotImplementedException();
         }
 
-        public async Task<bool> UpdateDetailsAsync(int id, int userId, string title, string description, PriorityLevel priority, CancellationToken cancellationToken)
+        public async Task<bool> UpdateDetailsAsync(int id, int userId, string title, string description, PriorityLevel priority, bool updateDueDate, DateTime? dueDate, CancellationToken cancellationToken)
         {
             var affected = await _context.Tasks
                 .Where(task => task.Id == id && task.UserId == userId)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(task => task.Title, title)
                     .SetProperty(task => task.Description, description)
-                    .SetProperty(task => task.PriorityLevel, priority), cancellationToken);
+                    .SetProperty(task => task.PriorityLevel, priority)
+                    .SetProperty(task => task.DueDate, task => updateDueDate ? dueDate : task.DueDate), cancellationToken);
             return affected == 1;
         }
 

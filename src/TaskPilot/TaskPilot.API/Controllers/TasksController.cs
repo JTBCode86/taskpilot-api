@@ -116,7 +116,7 @@ namespace TaskPilot.API.Controllers
         public async Task<IActionResult> UpdateTask(int taskId, [FromBody] UpdateTaskRequest request, CancellationToken cancellationToken)
         {
             var updated = await _manageTaskHandler.Update(taskId, CurrentUserId(), request.Title, request.Description,
-                (PriorityLevel)request.PriorityLevel, cancellationToken);
+                (PriorityLevel)request.PriorityLevel, request.HasDueDate, request.DueDate, cancellationToken);
             return updated ? Ok(new UpdatedTaskResponse(taskId)) : NotFound();
         }
 
