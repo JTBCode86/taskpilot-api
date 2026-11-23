@@ -246,3 +246,6 @@ Ideias para evolução do projeto:
 - `src/Banco de dados`: scripts SQL e sequência de inicialização.
 - `src/taskpilot_client`: cliente Python de demonstração.
 - `src/taskpilot_frontend`: interface React e TypeScript.
+- `docker`: inicialização do banco e testes de migração.
+- `.github/workflows`: configuração da integração contínua.
+- `docs`: GIFs de demonstração e do fluxo de informações.
