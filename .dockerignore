@@ -8,3 +8,4 @@
 .vscode
 src/taskpilot_frontend/node_modules
 src/taskpilot_frontend/dist
+src/taskpilot_frontend/test-results

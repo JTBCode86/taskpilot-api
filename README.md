@@ -74,6 +74,20 @@ npm run dev
 
 O proxy local usa a API em `http://127.0.0.1:8080`; se necessário, defina `TASKPILOT_PROXY_TARGET` antes de iniciar o Vite. Rode `npm run lint`, `npm test` e `npm run build` para validar a interface.
 
+### Testes ponta a ponta
+
+Os testes Playwright usam o Chromium e criam usuários e tarefas reais. Execute-os somente contra uma instância de teste dedicada, nunca contra dados que queira preservar. Com essa instância e a interface disponíveis, no diretório `src\taskpilot_frontend`:
+
+```powershell
+npm ci
+npx playwright install chromium
+$env:TASKPILOT_E2E_URL = "http://127.0.0.1:5173"
+npm run test:e2e
+Remove-Item Env:\TASKPILOT_E2E_URL
+```
+
+Altere a URL para a porta da instância de teste. Os dados criados permanecem no banco local; no CI, o banco e o volume são isolados e removidos ao final.
+
 ## Autenticação
 
 Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastName`, `email` e `password` (12 a 128 caracteres). Depois, use `POST /api/v1/auth/login` com e-mail e senha. O retorno contém `accessToken`, `userId` e `expiresAt`; envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
@@ -140,7 +154,7 @@ Sem essa variável, os testes de integração são marcados como inconclusivos. 
 
 ## Integração contínua
 
-O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo verifica, testa e compila a interface, compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local e o cliente Python contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
+O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo verifica, testa e compila a interface, compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local, o cliente Python e o fluxo ponta a ponta no Chromium contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
 
 Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco, a chave JWT e as credenciais do cliente de teste são geradas para cada execução. O CI não faz deploy.
 

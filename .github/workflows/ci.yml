@@ -52,7 +52,7 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -61,6 +61,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/taskpilot_frontend/package-lock.json
       - name: Prepare isolated environment
         run: |
           password="Ci_$(openssl rand -hex 18)_9a"
@@ -76,24 +81,29 @@ jobs:
             echo "TASKPILOT_PASSWORD=$client_password"
             echo "COMPOSE_PROJECT_NAME=taskpilot-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             echo "TASKPILOT_API_PORT=0"
+            echo "TASKPILOT_FRONTEND_PORT=0"
           } >> "$GITHUB_ENV"
-      - name: Start API and database
+      - name: Start frontend, API and database
         run: |
-          docker compose up --build -d
+          docker compose --profile frontend up --build -d
           address="$(docker compose port api 8080)"
           test -n "$address"
           url="http://$address"
+          frontend_address="$(docker compose port frontend 5173)"
+          test -n "$frontend_address"
+          frontend_url="http://$frontend_address"
           {
             echo "TASKPILOT_INTEGRATION_URL=$url"
             echo "TASKPILOT_API_URL=$url"
+            echo "TASKPILOT_E2E_URL=$frontend_url"
           } >> "$GITHUB_ENV"
           for ((attempt=1; attempt<=60; attempt++)); do
-            if curl --fail --silent --show-error "$url/health"; then
+            if curl --fail --silent "$url/health" && curl --fail --silent "$frontend_url/" > /dev/null; then
               exit 0
             fi
             sleep 2
           done
-          echo "API health check did not succeed." >&2
+          echo "API or frontend did not become ready." >&2
           exit 1
       - name: Run integration tests
         run: |
@@ -161,17 +171,25 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python docker/tests/test_password_recovery.py
+      - name: Install browser test dependencies
+        working-directory: src/taskpilot_frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run browser end-to-end tests
+        working-directory: src/taskpilot_frontend
+        run: npm run test:e2e
       - name: Show container logs on failure
         if: failure()
         run: |
           if [[ -n "${MSSQL_SA_PASSWORD:-}" ]]; then
-            docker compose logs --no-color
+            docker compose --profile frontend logs --no-color
           fi
       - name: Remove isolated containers and volume
         if: always()
         run: |
           if [[ -n "${MSSQL_SA_PASSWORD:-}" && -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
-            docker compose down --volumes --remove-orphans
+            docker compose --profile frontend down --volumes --remove-orphans
           fi
 
   migration-tests:
