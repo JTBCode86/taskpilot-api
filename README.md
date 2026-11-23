@@ -1,5 +1,26 @@
 # 🚀TaskPilot API
 
+## 📑Índice
+
+- [Descrição](#descrição)
+- [Pré-requisitos](#pré-requisitos)
+- [Arquitetura](#arquitetura)
+  - [Fluxo de uma consulta](#fluxo-de-uma-consulta)
+- [Estrutura](#estrutura)
+- [Demonstração](#demonstração)
+- [Como executar](#como-executar)
+  - [Ambiente de desenvolvimento com Docker](#ambiente-de-desenvolvimento-com-docker)
+- [Interface web](#interface-web)
+- [Testes automatizados](#testes-automatizados)
+  - [Testes ponta a ponta](#testes-ponta-a-ponta)
+- [Autenticação](#autenticação)
+- [Migrações do banco](#migrações-do-banco)
+- [Cliente Python opcional](#cliente-python-opcional)
+- [Desenvolvimento e testes .NET](#desenvolvimento-e-testes-net)
+- [Integração contínua](#integração-contínua)
+- [Trade-offs de arquitetura](#trade-offs-de-arquitetura)
+- [Próximos passos e evoluções](#próximos-passos-e-evoluções)
+
 ## 📝Descrição
 
 O TaskPilot é um projeto didático de gerenciamento de tarefas, com API em ASP.NET Core, interface React, SQL Server e cliente de exemplo em Python. A solução permite cadastrar uma conta, autenticar-se e criar, consultar, editar, concluir e excluir as próprias tarefas.
@@ -45,6 +66,19 @@ flowchart LR
 ![Fluxo animado de uma consulta de tarefas](docs/fluxo-dados.gif)
 
 No exemplo simplificado, o navegador solicita as tarefas pela interface, e o proxy do Vite encaminha a requisição `/api` à API. Após a validação do JWT, a aplicação solicita os dados ao repositório na infraestrutura, que consulta o SQL Server. A resposta retorna pelo caminho inverso e a interface exibe as tarefas.
+
+## 📁Estrutura
+
+- `src/TaskPilot/TaskPilot.Domain`: entidades e contratos.
+- `src/TaskPilot/TaskPilot.Application`: casos de uso e regras de aplicação.
+- `src/TaskPilot/TaskPilot.Infrastructure`: acesso ao SQL Server e serviços externos.
+- `src/TaskPilot/TaskPilot.API`: endpoints HTTP e configuração.
+- `src/Banco de dados`: scripts SQL e sequência de inicialização.
+- `src/taskpilot_client`: cliente Python de demonstração.
+- `src/taskpilot_frontend`: interface React e TypeScript.
+- `docker`: inicialização do banco e testes de migração.
+- `.github/workflows`: configuração da integração contínua.
+- `docs`: GIFs de demonstração e do fluxo de informações.
 
 ## 🎬Demonstração
 
@@ -236,16 +270,3 @@ Ideias para evolução do projeto:
 2. **Organização:** explorar filtros e ordenação por prazo e prioridade.
 3. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
 4. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
-
-## 📁Estrutura
-
-- `src/TaskPilot/TaskPilot.Domain`: entidades e contratos.
-- `src/TaskPilot/TaskPilot.Application`: casos de uso e regras de aplicação.
-- `src/TaskPilot/TaskPilot.Infrastructure`: acesso ao SQL Server e serviços externos.
-- `src/TaskPilot/TaskPilot.API`: endpoints HTTP e configuração.
-- `src/Banco de dados`: scripts SQL e sequência de inicialização.
-- `src/taskpilot_client`: cliente Python de demonstração.
-- `src/taskpilot_frontend`: interface React e TypeScript.
-- `docker`: inicialização do banco e testes de migração.
-- `.github/workflows`: configuração da integração contínua.
-- `docs`: GIFs de demonstração e do fluxo de informações.
