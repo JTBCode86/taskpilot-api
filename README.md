@@ -1,14 +1,60 @@
-# TaskPilot API
+# 🚀TaskPilot API
 
-API de tarefas e usuários em ASP.NET Core, com SQL Server e cliente de exemplo em Python. A solução separa domínio, aplicação, infraestrutura e API. Os endpoints de tarefas permitem criar, concluir e consultar um resumo por usuário.
+## 📝Descrição
+
+O TaskPilot é um projeto didático de gerenciamento de tarefas, com API em ASP.NET Core, interface React, SQL Server e cliente de exemplo em Python. A solução permite cadastrar uma conta, autenticar-se e criar, consultar, editar, concluir e excluir as próprias tarefas.
 
 Para criar uma tarefa, autentique-se e informe um título não vazio com até 256 caracteres. A tarefa pertence ao usuário do token; um título inválido retorna HTTP 400.
 
 Tarefas próprias podem ser editadas (título, descrição e prioridade) ou excluídas permanentemente. A edição não altera o status nem a data de conclusão, inclusive em tarefas concluídas. A interface solicita confirmação antes de excluir.
 
-## Ambiente de desenvolvimento com Docker
+## 📋Pré-requisitos
 
-Pré-requisitos: Docker Engine com Compose e containers Linux, Git e pelo menos 2 GB de memória disponíveis para o SQL Server. A imagem oficial do SQL Server para Linux requer arquitetura x86-64 suportada. Não é necessário instalar SQL Server nem o SDK .NET no computador.
+Para executar a API, a interface e o banco com Docker:
+
+- Git e Docker Engine com Compose e containers Linux.
+- Arquitetura x86-64 suportada pela imagem oficial do SQL Server para Linux e pelo menos 2 GB de memória disponíveis para o banco.
+- Não é necessário instalar SQL Server, Node.js ou o SDK .NET no computador para usar os containers.
+
+Para desenvolvimento ou testes fora dos containers, instale conforme a necessidade: Node.js 22 para a interface, SDK .NET 10 para os projetos .NET e Python 3.9 ou superior para o cliente Python. Os testes ponta a ponta também precisam do Chromium instalado pelo Playwright.
+
+## 🏗Arquitetura
+
+O fluxo principal combina a interface React/TypeScript, a API ASP.NET Core e o SQL Server. O cliente Python é uma alternativa opcional para consumir a API.
+
+```mermaid
+flowchart LR
+    Browser["Navegador"] --> Frontend["React + Vite"]
+    Frontend -->|Proxy /api| API["API ASP.NET Core"]
+    Python["Cliente Python opcional"] -->|HTTP + JWT| API
+    API --> Application["Aplicação"]
+    Application --> Domain["Domínio"]
+    API -. Configuração e dependências .-> Infrastructure["Infraestrutura"]
+    Infrastructure --> Domain
+    Infrastructure --> SQL["SQL Server"]
+```
+
+- **API:** expõe os endpoints HTTP, autentica com JWT e configura as dependências.
+- **Aplicação:** implementa os casos de uso de tarefas e coordena as operações.
+- **Domínio:** reúne entidades, regras e contratos usados pelas demais camadas.
+- **Infraestrutura:** implementa acesso a dados e serviços externos; usa Entity Framework Core e procedimentos armazenados existentes.
+- **Banco:** armazena os dados no SQL Server; scripts versionados inicializam e atualizam o esquema.
+
+### 🔄Fluxo de uma consulta
+
+![Fluxo animado de uma consulta de tarefas](docs/fluxo-dados.gif)
+
+No exemplo simplificado, o navegador solicita as tarefas pela interface, e o proxy do Vite encaminha a requisição `/api` à API. Após a validação do JWT, a aplicação solicita os dados ao repositório na infraestrutura, que consulta o SQL Server. A resposta retorna pelo caminho inverso e a interface exibe as tarefas.
+
+## 🎬Demonstração
+
+![Demonstração do TaskPilot](docs/demo.gif)
+
+A demonstração apresenta cadastro, login e gerenciamento de tarefas com dados fictícios.
+
+## ▶Como executar
+
+### 🐳Ambiente de desenvolvimento com Docker
 
 Na raiz do repositório, copie `.env.example` para `.env` e substitua a senha de exemplo por uma senha forte, exclusiva para desenvolvimento. Para o formato da string de conexão usado aqui, não inclua ponto e vírgula, aspas ou cifrão na senha. Ela deve atender à política de complexidade do SQL Server. Defina também `TASKPILOT_JWT_KEY` como um segredo aleatório e exclusivo de pelo menos 32 bytes; a API não inicia sem ele. Nunca compartilhe ou versione `.env`.
 
@@ -48,7 +94,7 @@ docker compose down
 
 Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação, ainda faltam HTTPS, limitação de tentativas, verificação de e-mail e outros controles para produção. Não exponha a API na internet ou em redes não confiáveis.
 
-## Interface web
+## 💻Interface web
 
 Para iniciar a interface React com a API e o banco, após configurar `.env` conforme acima:
 
@@ -76,7 +122,20 @@ npm run dev
 
 O proxy local usa a API em `http://127.0.0.1:8080`; se necessário, defina `TASKPILOT_PROXY_TARGET` antes de iniciar o Vite. Rode `npm run lint`, `npm test` e `npm run build` para validar a interface.
 
-### Testes ponta a ponta
+## 🧪Testes automatizados
+
+O projeto inclui testes unitários para .NET, Python e interface, testes de integração contra SQL Server, testes de migração e testes ponta a ponta com Playwright. As instruções de execução estão nas seções [Testes ponta a ponta](#testes-ponta-a-ponta), [Migrações do banco](#migrações-do-banco) e [Desenvolvimento e testes .NET](#desenvolvimento-e-testes-net). O [CI](#integração-contínua) executa esses fluxos em ambientes isolados.
+
+Para executar os testes unitários do cliente Python, no diretório `src\taskpilot_client`:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+```
+
+Para a interface, no diretório `src\taskpilot_frontend`, execute `npm ci` e `npm test`.
+
+### 🔍Testes ponta a ponta
 
 Os testes Playwright usam o Chromium e criam usuários e tarefas reais. Execute-os somente contra uma instância de teste dedicada, nunca contra dados que queira preservar. Com essa instância e a interface disponíveis, no diretório `src\taskpilot_frontend`:
 
@@ -90,7 +149,7 @@ Remove-Item Env:\TASKPILOT_E2E_URL
 
 Altere a URL para a porta da instância de teste. Os dados criados permanecem no banco local; no CI, o banco e o volume são isolados e removidos ao final.
 
-## Autenticação
+## 🔐Autenticação
 
 Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastName`, `email` e `password` (12 a 128 caracteres). Depois, use `POST /api/v1/auth/login` com e-mail e senha. O retorno contém `accessToken`, `userId` e `expiresAt`; envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
 
@@ -106,7 +165,7 @@ docker compose run --rm --no-deps api reset-password 1
 
 Substitua `1` pelo ID desejado. A senha não aparece na digitação; contas inativas não são alteradas. Não passe senhas como argumentos nem compartilhe tokens. A recuperação de contas reais exige um processo administrativo confiável e não deve ser exposta a clientes.
 
-## Migrações do banco
+## 🗃Migrações do banco
 
 O histórico fica em `dbo.TaskPilotSchemaVersion`. Bancos criados pela versão anterior, que já possuem a marcação de versão 1, recebem as novas migrações sem recriar tabelas ou dados. A versão 2 adiciona metadados ao histórico; seu registro de versão 1 não tem data nem checksum retroativos.
 Os scripts referenciados por `init.sql` compõem a versão 1 e devem permanecer inalterados; mudanças de esquema devem ser feitas em novas migrações.
@@ -125,7 +184,7 @@ Os testes de migração usam um banco e volume Docker temporários isolados e os
 .\docker\tests\Test-DatabaseMigrations.ps1
 ```
 
-## Cliente Python opcional
+## 🐍Cliente Python opcional
 
 O cliente usa Python 3.9+ e não é necessário para executar a API:
 
@@ -137,7 +196,7 @@ python main.py
 
 Por padrão o cliente acessa `http://localhost:8080`. Para outra instância, defina `TASKPILOT_API_URL` antes de executá-lo. Para HTTPS, o certificado deve ser confiável pelo ambiente Python. O exemplo faz login e cria e conclui uma tarefa da conta informada. Cadastre a conta primeiro, defina `TASKPILOT_EMAIL` e `TASKPILOT_PASSWORD` no ambiente local e remova essas variáveis após o uso. Não versione credenciais.
 
-## Desenvolvimento e testes .NET
+## 🛠Desenvolvimento e testes .NET
 
 Para compilar ou executar testes fora dos containers, instale o SDK .NET 10:
 
@@ -156,13 +215,29 @@ Remove-Item Env:\TASKPILOT_INTEGRATION_URL
 
 Sem essa variável, os testes de integração são marcados como inconclusivos. Para executar a API diretamente no host, configure `ConnectionStrings__TaskPilotDBConnection` com uma conexão SQL Server válida e `Jwt__SigningKey` com um segredo aleatório; o Compose não publica o banco no host por padrão.
 
-## Integração contínua
+## 🔁Integração contínua
 
 O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo verifica, testa e compila a interface, compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local, o cliente Python e o fluxo ponta a ponta no Chromium contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
 
 Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco, a chave JWT e as credenciais do cliente de teste são geradas para cada execução. O CI não faz deploy.
 
-## Estrutura
+## ⚖Trade-offs de arquitetura
+
+- **SQL Server em container:** dispensa a instalação local do banco e aproxima os ambientes de desenvolvimento, mas exige Docker, memória e arquitetura compatível. O volume mantém os dados e precisa de backup.
+- **Interface via servidor de desenvolvimento e proxy:** mantém a API na mesma origem do navegador sem liberar CORS globalmente; é prático localmente, mas não é uma configuração de hospedagem de produção.
+- **Token em memória:** reduz a persistência local do token, mas exige novo login ao atualizar ou fechar a página. Sair remove o token da interface, sem revogá-lo no servidor.
+- **Entity Framework Core e procedimentos armazenados:** permitem estudar as duas abordagens, ao custo de manter lógica de acesso a dados em mais de um lugar e cuidar da compatibilidade das migrações.
+
+## 🧭Próximos passos e evoluções
+
+Ideias para evolução do projeto:
+
+1. **Prazos:** a API já aceita uma data de vencimento na criação; disponibilizar sua definição na interface e sua edição na API e na interface, destacar tarefas atrasadas e testar as regras de data.
+2. **Organização:** explorar filtros e ordenação por prazo e prioridade.
+3. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
+4. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
+
+## 📁Estrutura
 
 - `src/TaskPilot/TaskPilot.Domain`: entidades e contratos.
 - `src/TaskPilot/TaskPilot.Application`: casos de uso e regras de aplicação.
