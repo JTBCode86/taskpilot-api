@@ -257,10 +257,12 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 
 ## ⚖Trade-offs de arquitetura
 
-- **SQL Server em container:** dispensa a instalação local do banco e aproxima os ambientes de desenvolvimento, mas exige Docker, memória e arquitetura compatível. O volume mantém os dados e precisa de backup.
-- **Interface via servidor de desenvolvimento e proxy:** mantém a API na mesma origem do navegador sem liberar CORS globalmente; é prático localmente, mas não é uma configuração de hospedagem de produção.
-- **Token em memória:** reduz a persistência local do token, mas exige novo login ao atualizar ou fechar a página. Sair remove o token da interface, sem revogá-lo no servidor.
-- **Entity Framework Core e procedimentos armazenados:** permitem estudar as duas abordagens, ao custo de manter lógica de acesso a dados em mais de um lugar e cuidar da compatibilidade das migrações.
+| Decisão | Benefícios | Limitações |
+| --- | --- | --- |
+| SQL Server em container | Dispensa a instalação local do banco e aproxima os ambientes de desenvolvimento. | Exige Docker, memória e arquitetura compatível. O volume mantém os dados e precisa de backup. |
+| Interface via servidor de desenvolvimento e proxy | Mantém a API na mesma origem do navegador sem liberar CORS globalmente; é prático localmente. | Não é uma configuração de hospedagem de produção. |
+| Token em memória | Reduz a persistência local do token. | Exige novo login ao atualizar ou fechar a página. Sair remove o token da interface, sem revogá-lo no servidor. |
+| Entity Framework Core e procedimentos armazenados | Permitem estudar as duas abordagens de acesso a dados. | Exigem manter lógica de acesso a dados em mais de um lugar e cuidar da compatibilidade das migrações. |
 
 ## 🧭Próximos passos e evoluções
 
