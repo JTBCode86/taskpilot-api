@@ -46,6 +46,34 @@ docker compose down
 
 Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação, ainda faltam HTTPS, limitação de tentativas, verificação de e-mail e outros controles para produção. Não exponha a API na internet ou em redes não confiáveis.
 
+## Interface web
+
+Para iniciar a interface React com a API e o banco, após configurar `.env` conforme acima:
+
+```powershell
+docker compose --profile frontend up --build -d
+```
+
+Abra http://localhost:5173, crie uma conta ou entre com uma conta existente e gerencie suas tarefas. A interface e a API são publicadas apenas em `127.0.0.1`; o servidor de desenvolvimento encaminha `/api` para a API pela rede interna do Compose, sem habilitar CORS indiscriminadamente. Se a porta 5173 estiver ocupada, defina `TASKPILOT_FRONTEND_PORT` no `.env`.
+
+A sessão fica somente na memória do navegador: atualizar ou fechar a página encerra o acesso local. O token também expira após 30 minutos; sair da interface remove o token local, mas não revoga tokens já emitidos no servidor. A interface utiliza um servidor de desenvolvimento, não uma configuração pronta para produção. Alterações no código da interface exigem reconstruir o container com o comando acima.
+
+Para parar os serviços sem apagar o banco:
+
+```powershell
+docker compose --profile frontend down
+```
+
+Para desenvolver a interface diretamente no computador, instale Node.js 22, inicie a API com o Compose e execute:
+
+```powershell
+cd src\taskpilot_frontend
+npm ci
+npm run dev
+```
+
+O proxy local usa a API em `http://127.0.0.1:8080`; se necessário, defina `TASKPILOT_PROXY_TARGET` antes de iniciar o Vite. Rode `npm run lint`, `npm test` e `npm run build` para validar a interface.
+
 ## Autenticação
 
 Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastName`, `email` e `password` (12 a 128 caracteres). Depois, use `POST /api/v1/auth/login` com e-mail e senha. O retorno contém `accessToken`, `userId` e `expiresAt`; envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
@@ -112,7 +140,7 @@ Sem essa variável, os testes de integração são marcados como inconclusivos. 
 
 ## Integração contínua
 
-O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local e o cliente Python contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
+O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo verifica, testa e compila a interface, compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local e o cliente Python contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
 
 Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco, a chave JWT e as credenciais do cliente de teste são geradas para cada execução. O CI não faz deploy.
 
@@ -124,3 +152,4 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 - `src/TaskPilot/TaskPilot.API`: endpoints HTTP e configuração.
 - `src/Banco de dados`: scripts SQL e sequência de inicialização.
 - `src/taskpilot_client`: cliente Python de demonstração.
+- `src/taskpilot_frontend`: interface React e TypeScript.

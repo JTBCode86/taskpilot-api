@@ -6,3 +6,5 @@
 **/*.pyc
 .vs
 .vscode
+src/taskpilot_frontend/node_modules
+src/taskpilot_frontend/dist
