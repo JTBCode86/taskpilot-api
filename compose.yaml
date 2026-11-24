@@ -30,11 +30,23 @@ services:
       Jwt__SigningKey: ${TASKPILOT_JWT_KEY:-}
       RateLimiting__Auth__LoginPermitLimit: "1000"
       RateLimiting__Auth__RegisterPermitLimit: "1000"
+      Observability__Otlp__Enabled: ${TASKPILOT_OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: TaskPilot.API
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     ports:
       - "127.0.0.1:${TASKPILOT_API_PORT:-8080}:8080"
     depends_on:
       db-init:
         condition: service_completed_successfully
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/aspire/dashboard:13
+    profiles: ["observability"]
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "127.0.0.1:${TASKPILOT_DASHBOARD_PORT:-18888}:18888"
 
   frontend:
     profiles: ["frontend"]

@@ -13,6 +13,7 @@
 - [Como executar](#como-executar)
   - [Ambiente de desenvolvimento com Docker](#ambiente-de-desenvolvimento-com-docker)
 - [Interface web](#interface-web)
+- [Observabilidade local](#observabilidade-local)
 - [Testes automatizados](#testes-automatizados)
   - [Testes ponta a ponta](#testes-ponta-a-ponta)
 - [Autenticação](#autenticação)
@@ -165,6 +166,24 @@ npm run dev
 
 O proxy local usa a API em `http://127.0.0.1:8080`; se necessário, defina `TASKPILOT_PROXY_TARGET` antes de iniciar o Vite. Rode `npm run lint`, `npm test` e `npm run build` para validar a interface.
 
+## 🔭Observabilidade local
+
+A API pode exportar traces e métricas OpenTelemetry por OTLP para o Aspire Dashboard, executado em um container opcional. O envio fica desativado por padrão. Para habilitar, defina `TASKPILOT_OTEL_ENABLED=true` no `.env` e inicie o perfil:
+
+```powershell
+docker compose --profile observability up --build -d
+```
+
+Abra http://localhost:18888. Para iniciar também a interface web, adicione `--profile frontend`. O dashboard mostra traces de requisições ASP.NET Core, chamadas HTTP e operações SQL, além de métricas HTTP, do runtime .NET e de duração das operações SQL. Texto SQL, nomes de procedures e atributos de consultas/parâmetros são removidos dos spans; os logs continuam no console e não são exportados ao dashboard.
+
+![Demonstração de métricas e rastreamentos OpenTelemetry](docs/observability.gif)
+
+O dashboard é apenas para desenvolvimento e diagnóstico local: a autenticação anônima está habilitada, a interface é publicada somente em `127.0.0.1` e a porta OTLP fica restrita à rede interna do Compose. Não o exponha em redes públicas ou não confiáveis. Para parar os serviços sem apagar o banco:
+
+```powershell
+docker compose --profile observability down
+```
+
 ## 🧪Testes automatizados
 
 O projeto inclui testes unitários para .NET, Python e interface, testes de integração contra SQL Server, testes de migração e testes ponta a ponta com Playwright. As instruções de execução estão nas seções [Testes ponta a ponta](#testes-ponta-a-ponta), [Migrações do banco](#migrações-do-banco) e [Desenvolvimento e testes .NET](#desenvolvimento-e-testes-net). O [CI](#integração-contínua) executa esses fluxos em ambientes isolados.
@@ -280,4 +299,4 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 Ideias para evolução do projeto:
 
 1. **Segurança e produção:** configurar HTTPS, verificação de e-mail e uma hospedagem adequada antes de expor a aplicação. Em hospedagem atrás de proxy, confiar somente nos cabeçalhos encaminhados por proxies conhecidos.
-2. **Observabilidade:** complementar os logs estruturados e health checks básicos com métricas e rastreamento distribuído, escolhendo um destino adequado à hospedagem e sem registrar dados sensíveis.
+2. **Observabilidade em produção:** escolher um destino OTLP com retenção, alertas e controles de acesso adequados; o dashboard local desta etapa não é uma solução de monitoramento de produção.

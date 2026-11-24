@@ -21,6 +21,7 @@ using Microsoft.OpenApi.Models;
 using TaskPilot.API.Auth;
 using TaskPilot.Domain.Entities;
 using TaskPilot.Domain.Interfaces;
+using TaskPilot.API.Observability;
 
 namespace TaskPilot.API
 {
@@ -84,6 +85,7 @@ namespace TaskPilot.API
             services.AddControllers();
             services.AddHealthChecks()
                 .AddCheck<DatabaseHealthCheck>("database", tags: new[] { "ready" });
+            services.AddTaskPilotOpenTelemetry(Configuration);
 
             // Adicionar configuração do Swagger/OpenAPI (muito útil)
             services.AddSwaggerGen(c =>
