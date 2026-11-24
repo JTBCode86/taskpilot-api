@@ -1,5 +1,7 @@
 # 🚀TaskPilot API
 
+[![CI](https://github.com/JTBCode86/taskpilot-api/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JTBCode86/taskpilot-api/actions/workflows/ci.yml)
+
 ## 📑Índice
 
 - [Descrição](#descrição)
