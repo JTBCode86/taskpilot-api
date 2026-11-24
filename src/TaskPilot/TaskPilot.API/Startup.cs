@@ -12,6 +12,7 @@ using System;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using TaskPilot.API.Auth;
@@ -76,6 +77,7 @@ namespace TaskPilot.API
                     };
                 });
             services.AddAuthorization();
+            services.AddRateLimiter(options => AuthRateLimitPolicies.Configure(options, Configuration));
             services.AddControllers();
             services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
@@ -111,6 +113,7 @@ namespace TaskPilot.API
 
             app.UseHttpsRedirection();
             app.UseRouting();
+            app.UseRateLimiter();
             app.UseAuthentication();
             app.UseAuthorization();
 

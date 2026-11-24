@@ -191,6 +191,8 @@ Altere a URL para a porta da instância de teste. Os dados criados permanecem no
 
 ## 🔐Autenticação
 
+Os endpoints públicos de login e cadastro têm limites separados por IP: 5 tentativas de login e 3 cadastros por minuto. Ao exceder o limite, a API responde HTTP 429; as tentativas não ficam enfileiradas. O Compose de desenvolvimento, publicado apenas em `127.0.0.1`, usa limites maiores para que os testes locais compartilhem o mesmo endereço sem interferir entre si. Em hospedagem atrás de proxy, configure o encaminhamento de cabeçalhos para confiar somente no proxy conhecido antes de depender do IP do cliente; não confie em `X-Forwarded-For` enviado diretamente por qualquer origem.
+
 Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastName`, `email` e `password` (12 a 128 caracteres). Depois, use `POST /api/v1/auth/login` com e-mail e senha. O retorno contém `accessToken`, `userId` e `expiresAt`; envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
 
 O token expira em 30 minutos. Cada usuário só pode consultar e concluir suas próprias tarefas; o `userId` opcional na criação deve corresponder ao token. Credenciais inválidas ou token ausente retornam 401; tentativas de acesso ao resumo ou criação para outro usuário retornam 403, e a conclusão de uma tarefa de outro usuário retorna 404. Alterar a chave JWT ou a senha invalida os tokens anteriores.
