@@ -130,7 +130,7 @@ docker compose down
 
 **Atenção:** `docker compose down --volumes` apaga permanentemente o banco do projeto. Antes de aplicar migrações, remover volumes ou atualizar o SQL Server, faça um backup e copie-o para fora do volume. Bancos externos sem o marcador de versão não são importados automaticamente; sua adoção requer análise e migração separadas.
 
-Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação, ainda faltam HTTPS, limitação de tentativas, verificação de e-mail e outros controles para produção. Não exponha a API na internet ou em redes não confiáveis.
+Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação e da limitação de tentativas, ainda faltam HTTPS, verificação de e-mail e outros controles para produção. Não exponha a API na internet ou em redes não confiáveis.
 
 ## 💻Interface web
 
@@ -276,5 +276,5 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 
 Ideias para evolução do projeto:
 
-1. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
+1. **Segurança e produção:** configurar HTTPS, verificação de e-mail e uma hospedagem adequada antes de expor a aplicação. Em hospedagem atrás de proxy, confiar somente nos cabeçalhos encaminhados por proxies conhecidos.
 2. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
