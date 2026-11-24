@@ -5,6 +5,15 @@
 @userId = replace-with-your-user-id
 @taskId = replace-with-your-task-id
 
+### Verificar se a API está ativa (sem consultar dependências)
+GET {{baseUrl}}/health/live
+
+### Verificar se a API está pronta (inclui conexão com o banco)
+GET {{baseUrl}}/health/ready
+
+### Verificação legada (equivalente à prontidão)
+GET {{baseUrl}}/health
+
 ### Criar conta
 POST {{baseUrl}}/api/v1/auth/register
 Content-Type: application/json

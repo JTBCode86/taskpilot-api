@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Diagnostics;
 using System.Net;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -27,7 +28,8 @@ namespace TaskPilot.API.Extensions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Um erro inesperado ocorreu: {Message}", ex.Message);
+                var traceId = Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier;
+                _logger.LogError(ex, "Um erro inesperado ocorreu. TraceId: {TraceId}", traceId);
                 await HandleExceptionAsync(httpContext, ex);
             }
         }

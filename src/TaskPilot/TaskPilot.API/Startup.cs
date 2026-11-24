@@ -1,14 +1,17 @@
 // TaskPilot.API/Startup.cs
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TaskPilot.Application;      // Para AddApplicationServices
 using TaskPilot.Infrastructure;   // Para AddInfrastructureServices
 using TaskPilot.API.Extensions;   // Para ExceptionMiddleware
+using TaskPilot.API.Middleware;
 using TaskPilot.API.Health;
 using System;
+using System.Linq;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -79,7 +82,8 @@ namespace TaskPilot.API
             services.AddAuthorization();
             services.AddRateLimiter(options => AuthRateLimitPolicies.Configure(options, Configuration));
             services.AddControllers();
-            services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
+            services.AddHealthChecks()
+                .AddCheck<DatabaseHealthCheck>("database", tags: new[] { "ready" });
 
             // Adicionar configuração do Swagger/OpenAPI (muito útil)
             services.AddSwaggerGen(c =>
@@ -109,6 +113,7 @@ namespace TaskPilot.API
 
             // MIDDLEWARE PARA TRATAMENTO GLOBAL DE EXCEÇÕES
             // Deve vir antes do UseRouting
+            app.UseMiddleware<RequestLoggingMiddleware>();
             app.UseMiddleware<ExceptionMiddleware>();
 
             app.UseHttpsRedirection();
@@ -120,7 +125,18 @@ namespace TaskPilot.API
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
-                endpoints.MapHealthChecks("/health");
+                endpoints.MapHealthChecks("/health/live", new HealthCheckOptions
+                {
+                    Predicate = _ => false
+                });
+                endpoints.MapHealthChecks("/health/ready", new HealthCheckOptions
+                {
+                    Predicate = check => check.Tags.Contains("ready")
+                });
+                endpoints.MapHealthChecks("/health", new HealthCheckOptions
+                {
+                    Predicate = check => check.Tags.Contains("ready")
+                });
             });
         }
     }
