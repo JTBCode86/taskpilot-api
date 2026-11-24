@@ -118,7 +118,10 @@ docker compose logs db-init api
 O serviço `db-init` aguarda o banco, inicializa a versão 1 em bancos vazios e aplica as migrações pendentes. Ele deve terminar com sucesso antes da API iniciar. Na primeira execução são criados os status e um usuário de demonstração de ID 1, sem senha utilizável. Se o banco já contiver objetos sem o marcador de inicialização, o processo interrompe a execução para evitar alterar dados existentes.
 
 - Swagger: http://localhost:8080/swagger
-- Saúde da API e conexão ao banco: http://localhost:8080/health
+- API ativa (sem dependências): http://localhost:8080/health/live
+- API pronta para receber tráfego (inclui banco): http://localhost:8080/health/ready
+- O endpoint legado `/health` continua equivalente à prontidão.
+- A API emite logs JSON por requisição no console, com método, rota parametrizada, status, duração e `TraceId`; query string, cabeçalhos e corpo não são registrados.
 - Os endpoints de tarefas exigem um token de acesso; consulte a seção Autenticação.
 
 O Compose publica a API apenas na interface local e não publica a porta do banco. O volume `sql_data` mantém os dados entre reinicializações e `docker compose down`. A senha configurada na criação do volume continua sendo a senha do SQL Server; alterá-la em `.env` não muda a senha existente.
@@ -277,4 +280,4 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 Ideias para evolução do projeto:
 
 1. **Segurança e produção:** configurar HTTPS, verificação de e-mail e uma hospedagem adequada antes de expor a aplicação. Em hospedagem atrás de proxy, confiar somente nos cabeçalhos encaminhados por proxies conhecidos.
-2. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
+2. **Observabilidade:** complementar os logs estruturados e health checks básicos com métricas e rastreamento distribuído, escolhendo um destino adequado à hospedagem e sem registrar dados sensíveis.
