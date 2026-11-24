@@ -114,10 +114,13 @@ select { height: 42px; }
 .task-count { display: inline-grid; place-items: center; min-width: 25px; height: 24px; border-radius: 7px; background: #edf3ee; color: #799682; font: 700 11px system-ui, sans-serif; letter-spacing: 0; }
 .tasks-section > .notice { margin-top: 18px; }
 .task-panel { margin-top: 20px; background: #fff; border: 1px solid #e9eee9; border-radius: 13px; overflow: hidden; }
-.filter-bar { display: flex; align-items: center; gap: 6px; padding: 13px 15px; border-bottom: 1px solid #eef2ee; }
+.filter-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 13px 15px; border-bottom: 1px solid #eef2ee; }
+.status-filters, .task-filter-options { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .filter { border: 0; padding: 8px 12px; border-radius: 7px; background: transparent; color: #93a198; font-size: 12px; font-weight: 600; }
 .filter:hover { color: #3c6b4d; }
 .filter.active { color: #467359; background: #eef5ef; }
+.task-filter-field { display: grid; gap: 4px; min-width: 116px; color: #849389; font-size: 10px; }
+.task-filter-field select { width: 100%; height: 34px; padding: 5px 8px; border-radius: 7px; font-size: 11px; }
 .empty-state { text-align: center; padding: 50px 20px 55px; }
 .empty-icon { margin: 0 auto 15px; width: 50px; height: 50px; display: grid; place-items: center; color: #8caa93; background: #f1f6f1; border-radius: 16px; }
 .empty-state h3 { font-size: 15px; color: #495e50; }

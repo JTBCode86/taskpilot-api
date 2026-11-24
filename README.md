@@ -88,7 +88,7 @@ No exemplo simplificado, o navegador solicita as tarefas pela interface, e o pro
 
 ![Demonstração do TaskPilot](docs/demo.gif)
 
-A demonstração apresenta cadastro, login, gerenciamento de tarefas e criação, alteração e remoção de prazos com dados fictícios.
+A demonstração apresenta cadastro, login, gerenciamento de tarefas, criação, alteração e remoção de prazos, além dos filtros e da ordenação por prioridade e prazo. Os dados exibidos são fictícios.
 
 ## ▶Como executar
 
@@ -141,6 +141,8 @@ docker compose --profile frontend up --build -d
 ```
 
 Abra http://localhost:5173, crie uma conta ou entre com uma conta existente e gerencie suas tarefas. A interface e a API são publicadas apenas em `127.0.0.1`; o servidor de desenvolvimento encaminha `/api` para a API pela rede interna do Compose, sem habilitar CORS indiscriminadamente. Se a porta 5173 estiver ocupada, defina `TASKPILOT_FRONTEND_PORT` no `.env`.
+
+A lista permite filtrar tarefas por status, prioridade e prazo (incluindo as atrasadas) e ordená-las por prazo ou prioridade. Por padrão, as tarefas mais recentes aparecem primeiro.
 
 A sessão fica somente na memória do navegador: atualizar ou fechar a página encerra o acesso local. O token também expira após 30 minutos; sair da interface remove o token local, mas não revoga tokens já emitidos no servidor. A interface utiliza um servidor de desenvolvimento, não uma configuração pronta para produção. Alterações no código da interface exigem reconstruir o container com o comando acima.
 
@@ -272,6 +274,5 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 
 Ideias para evolução do projeto:
 
-1. **Organização:** explorar filtros e ordenação por prazo e prioridade.
-2. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
-3. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
+1. **Segurança e produção:** avaliar HTTPS, limitação de tentativas, verificação de e-mail e uma configuração de hospedagem adequada antes de expor a aplicação.
+2. **Observabilidade:** planejar logs estruturados, métricas e rastreamento de requisições para monitorar a aplicação e facilitar o diagnóstico de falhas, sem registrar dados sensíveis.
