@@ -71,9 +71,15 @@ describe('TaskPilot', () => {
     await user.type(screen.getByLabelText('Título'), 'Planejar a semana')
     await user.type(screen.getByLabelText(/descrição/i), 'Definir prioridades')
     await user.selectOptions(screen.getByLabelText('Prioridade'), '2')
+    await user.selectOptions(screen.getByLabelText('Filtrar por prioridade'), 'High')
+    await user.selectOptions(screen.getByLabelText('Filtrar por prazo'), 'overdue')
+    await user.selectOptions(screen.getByLabelText('Ordenar tarefas'), 'priority-desc')
     await user.click(screen.getByRole('button', { name: 'Criar tarefa' }))
     const task = await screen.findByRole('listitem')
     expect(within(task).getByText('Planejar a semana')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filtrar por prioridade')).toHaveValue('all')
+    expect(screen.getByLabelText('Filtrar por prazo')).toHaveValue('all')
+    expect(screen.getByLabelText('Ordenar tarefas')).toHaveValue('recent')
     const createCall = fetchMock.mock.calls.find(([path]) => path === '/api/v1/tasks')
     expect(createCall).toBeDefined()
     expect(createCall?.[1].headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer test-token' })
@@ -223,7 +229,7 @@ describe('TaskPilot', () => {
     render(<App />)
     await signIn(user)
     expect(await screen.findByText('Prazo: 01/01/2000')).toBeInTheDocument()
-    expect(screen.queryByText(/Atrasada/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/· Atrasada$/)).not.toBeInTheDocument()
   })
 
   it('não destaca prazo de hoje ou futuro como atrasado', async () => {
@@ -240,6 +246,53 @@ describe('TaskPilot', () => {
     await signIn(user)
     expect(await screen.findByText('Hoje')).toBeInTheDocument()
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.queryByText(/Atrasada/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/· Atrasada$/)).not.toBeInTheDocument()
+  })
+
+  it('filtra por prioridade e prazo e ordena tarefas por prazo e prioridade', async () => {
+    const task = { description: null, status: 'Pendente', createdAt: '2026-01-01T10:00:00' }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(response(session))
+      .mockResolvedValueOnce(response([
+        { ...task, id: 21, title: 'Sem prazo', priority: 'Medium', dueDate: null },
+        { ...task, id: 22, title: 'Prazo distante', priority: 'High', dueDate: '2099-12-31T23:59:59' },
+        { ...task, id: 23, title: 'Atrasada', priority: 'Low', dueDate: '2000-01-01T23:59:59' },
+        { ...task, id: 24, title: 'Prazo próximo', priority: 'Medium', dueDate: '2090-01-01T23:59:59' },
+      ])))
+    const user = userEvent.setup()
+    render(<App />)
+    await signIn(user)
+    await screen.findByText('Prazo distante')
+
+    await user.selectOptions(screen.getByLabelText('Filtrar por prioridade'), 'High')
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByText('Prazo distante')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Filtrar por prioridade'), 'all')
+    await user.selectOptions(screen.getByLabelText('Filtrar por prazo'), 'overdue')
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByText('Atrasada')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Filtrar por prazo'), 'with-date')
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    await user.selectOptions(screen.getByLabelText('Filtrar por prazo'), 'without-date')
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Sem prazo')
+
+    await user.selectOptions(screen.getByLabelText('Filtrar por prazo'), 'all')
+    await user.selectOptions(screen.getByLabelText('Ordenar tarefas'), 'due-date')
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Atrasada'),
+      expect.stringContaining('Prazo próximo'),
+      expect.stringContaining('Prazo distante'),
+      expect.stringContaining('Sem prazo'),
+    ])
+
+    await user.selectOptions(screen.getByLabelText('Ordenar tarefas'), 'priority-desc')
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Prazo distante')
+    expect(screen.getAllByRole('listitem')[3]).toHaveTextContent('Atrasada')
+    await user.selectOptions(screen.getByLabelText('Ordenar tarefas'), 'priority-asc')
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Atrasada')
+    expect(screen.getAllByRole('listitem')[3]).toHaveTextContent('Prazo distante')
   })
 })

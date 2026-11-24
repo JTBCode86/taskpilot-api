@@ -13,6 +13,9 @@ type Props = {
 }
 
 type Filter = 'all' | 'open' | 'done'
+type PriorityFilter = 'all' | 'Low' | 'Medium' | 'High'
+type DueDateFilter = 'all' | 'with-date' | 'without-date' | 'overdue'
+type TaskSort = 'recent' | 'due-date' | 'priority-desc' | 'priority-asc'
 
 const priorityLabels: Record<string, string> = { Low: 'Baixa', Medium: 'Média', High: 'Alta' }
 const priorityValues: Record<string, number> = { Low: 1, Medium: 2, High: 3 }
@@ -29,6 +32,9 @@ export function Dashboard({ session, onSignOut }: Props) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
+  const [dueDateFilter, setDueDateFilter] = useState<DueDateFilter>('all')
+  const [taskSort, setTaskSort] = useState<TaskSort>('recent')
   const [showForm, setShowForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -116,6 +122,9 @@ export function Dashboard({ session, onSignOut }: Props) {
       setMessage(editingTask ? 'Tarefa atualizada.' : 'Tarefa criada. Um passo de cada vez!')
       setEditingTask(null)
       setFilter('all')
+      setPriorityFilter('all')
+      setDueDateFilter('all')
+      setTaskSort('recent')
       setReload((value) => value + 1)
     } catch (reason) {
       if (active.current && !controller.signal.aborted) handleError(reason, editingTask ? 'Não foi possível atualizar a tarefa. Tente novamente.' : 'Não foi possível criar a tarefa. Tente novamente.')
@@ -192,10 +201,32 @@ export function Dashboard({ session, onSignOut }: Props) {
 
   const completed = tasks.filter((task) => task.status === 'Concluída').length
   const open = tasks.length - completed
-  const visible = [...tasks].reverse().filter((task) => filter === 'all' || (filter === 'done' ? task.status === 'Concluída' : task.status !== 'Concluída'))
+  const todayDate = localDate(now)
+  const filteredTasks = [...tasks].reverse().filter((task) => {
+    const matchesStatus = filter === 'all' || (filter === 'done' ? task.status === 'Concluída' : task.status !== 'Concluída')
+    const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter
+    const dueDate = task.dueDate?.slice(0, 10)
+    const matchesDueDate = dueDateFilter === 'all' ||
+      (dueDateFilter === 'with-date' && dueDate !== undefined) ||
+      (dueDateFilter === 'without-date' && dueDate === undefined) ||
+      (dueDateFilter === 'overdue' && dueDate !== undefined && task.status !== 'Concluída' && dueDate < todayDate)
+    return matchesStatus && matchesPriority && matchesDueDate
+  })
+  const visible = taskSort === 'recent'
+    ? filteredTasks
+    : [...filteredTasks].sort((a, b) => {
+      if (taskSort === 'due-date') {
+        const aDate = a.dueDate?.slice(0, 10)
+        const bDate = b.dueDate?.slice(0, 10)
+        if (aDate === undefined) return bDate === undefined ? 0 : 1
+        if (bDate === undefined) return -1
+        return aDate.localeCompare(bDate)
+      }
+      const priorityDifference = (priorityValues[b.priority] ?? 0) - (priorityValues[a.priority] ?? 0)
+      return taskSort === 'priority-desc' ? priorityDifference : -priorityDifference
+    })
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0
   const today = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).format(now)
-  const todayDate = localDate(now)
 
   return (
     <div className="app-shell">
@@ -245,8 +276,15 @@ export function Dashboard({ session, onSignOut }: Props) {
             {message && <div className="notice notice-success" role="status">{message}</div>}
             {error && <div className="notice notice-error" role="alert">{error}{!loading && <button type="button" onClick={() => setReload((value) => value + 1)}><RefreshCw size={14} /> Atualizar</button>}</div>}
             <div className="task-panel">
-              <div className="filter-bar" role="group" aria-label="Filtrar tarefas">
-                {([['all', 'Todas'], ['open', 'Em aberto'], ['done', 'Concluídas']] as const).map(([value, label]) => <button key={value} type="button" className={filter === value ? 'filter active' : 'filter'} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}
+              <div className="filter-bar">
+                <div className="status-filters" role="group" aria-label="Filtrar por status">
+                  {([['all', 'Todas'], ['open', 'Em aberto'], ['done', 'Concluídas']] as const).map(([value, label]) => <button key={value} type="button" className={filter === value ? 'filter active' : 'filter'} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}
+                </div>
+                <div className="task-filter-options">
+                  <label className="task-filter-field">Filtrar prioridade<select aria-label="Filtrar por prioridade" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)}><option value="all">Todas</option><option value="Low">Baixa</option><option value="Medium">Média</option><option value="High">Alta</option></select></label>
+                  <label className="task-filter-field">Filtrar prazo<select aria-label="Filtrar por prazo" value={dueDateFilter} onChange={(event) => setDueDateFilter(event.target.value as DueDateFilter)}><option value="all">Todos</option><option value="with-date">Com prazo</option><option value="without-date">Sem prazo</option><option value="overdue">Atrasadas</option></select></label>
+                  <label className="task-filter-field">Ordenar<select aria-label="Ordenar tarefas" value={taskSort} onChange={(event) => setTaskSort(event.target.value as TaskSort)}><option value="recent">Mais recentes</option><option value="due-date">Prazo mais próximo</option><option value="priority-desc">Maior prioridade</option><option value="priority-asc">Menor prioridade</option></select></label>
+                </div>
               </div>
               {loading ? <div className="empty-state"><p>Carregando suas tarefas...</p></div> : !hasLoaded ? <div className="empty-state"><p>Atualize a lista para tentar novamente.</p></div> : visible.length === 0 ? (
                 <div className="empty-state"><div className="empty-icon"><ListTodo size={25} /></div><h3>{tasks.length === 0 ? 'Uma página em branco.' : 'Nada por aqui ainda.'}</h3><p>{tasks.length === 0 ? 'Comece criando sua primeira tarefa. O resto vem depois.' : 'Nenhuma tarefa neste filtro por enquanto.'}</p>{tasks.length === 0 && !showForm && <button type="button" className="text-button empty-action" onClick={() => setShowForm(true)}>Criar primeira tarefa <ArrowRight size={16} /></button>}</div>
