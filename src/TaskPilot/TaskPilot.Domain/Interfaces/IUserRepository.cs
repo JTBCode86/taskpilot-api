@@ -14,6 +14,17 @@ namespace TaskPilot.Domain.Interfaces
         Task<User> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
         Task<User> GetForAuthenticationByIdAsync(int id, CancellationToken cancellationToken = default);
         Task<int> AddForAuthenticationAsync(User user, CancellationToken cancellationToken = default);
+        Task<bool> TryIssueEmailVerificationTokenAsync(
+            int userId,
+            string tokenHash,
+            DateTimeOffset expiresAtUtc,
+            DateTimeOffset sentAtUtc,
+            DateTimeOffset resendAllowedAfterUtc,
+            CancellationToken cancellationToken = default);
+        Task<bool> VerifyEmailTokenAsync(
+            string tokenHash,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default);
         // Métodos específicos de consulta de Usuários, ex: Task<IEnumerable<User>> GetActiveUsersAsync();
     }
 }

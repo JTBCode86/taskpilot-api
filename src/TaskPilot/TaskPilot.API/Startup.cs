@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,6 +13,7 @@ using TaskPilot.API.Middleware;
 using TaskPilot.API.Health;
 using System;
 using System.Linq;
+using System.Net;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -41,8 +43,40 @@ namespace TaskPilot.API
             services.AddApplicationServices();
             services.AddInfrastructureServices(Configuration); // Passa a configuraÁ„o do BD/APIs
 
+            var knownProxyAddresses = Configuration
+                .GetSection("ForwardedHeaders:KnownProxies")
+                .GetChildren()
+                .Select(proxy => proxy.Value)
+                .ToArray();
+            var knownProxies = knownProxyAddresses
+                .Select(address =>
+                {
+                    if (string.IsNullOrWhiteSpace(address) || !IPAddress.TryParse(address, out var ipAddress))
+                        throw new InvalidOperationException(
+                            "ForwardedHeaders:KnownProxies deve conter somente endere√ßos IP v√°lidos.");
+
+                    return ipAddress;
+                })
+                .ToArray();
+
+            services.Configure<ForwardedHeadersOptions>(options =>
+            {
+                options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+                options.ForwardLimit = 1;
+
+                if (knownProxies.Length == 0)
+                    return;
+
+                options.KnownIPNetworks.Clear();
+                options.KnownProxies.Clear();
+                foreach (var proxy in knownProxies)
+                    options.KnownProxies.Add(proxy);
+            });
+
             var tokens = new TokenService(Configuration["Jwt:SigningKey"]);
             services.AddSingleton(tokens);
+            services.Configure<EmailOptions>(Configuration.GetSection("Email"));
+            services.AddScoped<IEmailSender, SmtpEmailSender>();
             services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
             services.AddScoped<IAccountService, AccountService>();
             services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -83,6 +117,7 @@ namespace TaskPilot.API
             services.AddAuthorization();
             services.AddRateLimiter(options => AuthRateLimitPolicies.Configure(options, Configuration));
             services.AddControllers();
+            services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
             services.AddHealthChecks()
                 .AddCheck<DatabaseHealthCheck>("database", tags: new[] { "ready" });
             services.AddTaskPilotOpenTelemetry(Configuration);
@@ -104,6 +139,12 @@ namespace TaskPilot.API
         // Configura o pipeline de requisiÁıes HTTP
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
+            if (env.IsProduction() && HasWildcardAllowedHosts(Configuration["AllowedHosts"]))
+                throw new InvalidOperationException(
+                    "Configure AllowedHosts com os dom√≠nios permitidos antes de iniciar em Production.");
+
+            app.UseForwardedHeaders();
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
@@ -117,6 +158,9 @@ namespace TaskPilot.API
             // Deve vir antes do UseRouting
             app.UseMiddleware<RequestLoggingMiddleware>();
             app.UseMiddleware<ExceptionMiddleware>();
+
+            if (!env.IsDevelopment())
+                app.UseHsts();
 
             app.UseHttpsRedirection();
             app.UseRouting();
@@ -140,6 +184,14 @@ namespace TaskPilot.API
                     Predicate = check => check.Tags.Contains("ready")
                 });
             });
+        }
+
+        private static bool HasWildcardAllowedHosts(string allowedHosts)
+        {
+            if (string.IsNullOrWhiteSpace(allowedHosts))
+                return true;
+
+            return allowedHosts.Split(';').Any(host => host.Trim() == "*");
         }
     }
 }

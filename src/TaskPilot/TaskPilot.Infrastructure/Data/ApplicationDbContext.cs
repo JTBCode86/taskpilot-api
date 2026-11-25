@@ -31,6 +31,15 @@ namespace TaskPilot.Infrastructure.Data
             // modelBuilder.ApplyConfiguration(new TaskConfiguration());
             // modelBuilder.ApplyConfiguration(new TaskCategoryMapConfiguration());
 
+            modelBuilder.Entity<User>()
+                .Property(user => user.EmailVerificationTokenHash)
+                .HasMaxLength(64);
+            modelBuilder.Entity<User>()
+                .HasIndex(user => user.EmailVerificationTokenHash)
+                .HasDatabaseName("UX_Users_EmailVerificationTokenHash")
+                .IsUnique()
+                .HasFilter("[EmailVerificationTokenHash] IS NOT NULL");
+
             // Garante a inserção de dados iniciais para a tabela de Status (Seed Data)
             modelBuilder.Entity<TaskStatus>().HasData(
                 new TaskStatus { Id = 1, Name = "Pendente" },

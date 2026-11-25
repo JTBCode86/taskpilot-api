@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowDownRight, ArrowRight, Check, Compass, Layers2, Sparkles } from 'lucide-react'
-import { ApiError, login, register } from './api'
+import { ApiError, login, register, resendVerification } from './api'
 import type { Session } from './api'
 
 type Props = {
@@ -18,25 +18,29 @@ export function AuthScreen({ notice, onLogin }: Props) {
   const [message, setMessage] = useState(notice)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [canResendVerification, setCanResendVerification] = useState(false)
 
   function changeMode(next: 'login' | 'register') {
     setMode(next)
     setError('')
     setMessage('')
     setPassword('')
+    setCanResendVerification(false)
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
     setMessage('')
+    setCanResendVerification(false)
     setBusy(true)
     try {
       if (mode === 'register') {
         await register({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), password })
         setPassword('')
         setMode('login')
-        setMessage('Conta criada! Entre com seu e-mail e senha.')
+        setCanResendVerification(true)
+        setMessage('Conta criada. Confira seu e-mail para confirmar o cadastro.')
       } else {
         const session = await login(email.trim(), password)
         if (Date.parse(session.expiresAt) <= Date.now()) {
@@ -48,12 +52,41 @@ export function AuthScreen({ notice, onLogin }: Props) {
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) {
         setError('E-mail ou senha inválidos. Confira seus dados e tente novamente.')
+      } else if (reason instanceof ApiError && reason.status === 403) {
+        setCanResendVerification(true)
+        setError('Sua conta ainda não foi confirmada. Confira seu e-mail.')
       } else if (reason instanceof ApiError && reason.status === 409) {
         setError('Este e-mail já está cadastrado. Tente entrar na sua conta.')
+      } else if (reason instanceof ApiError && reason.status === 503 && mode === 'register') {
+        setPassword('')
+        setMode('login')
+        setCanResendVerification(true)
+        setError('A conta foi criada, mas o e-mail não foi enviado. Tente reenviar a confirmação.')
       } else if (reason instanceof ApiError && reason.status === 400) {
         setError('Confira os dados informados e tente novamente.')
       } else {
         setError('Não foi possível conectar. Verifique a API e tente novamente.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resendConfirmation() {
+    setError('')
+    setMessage('')
+    setBusy(true)
+    try {
+      await resendVerification(email.trim())
+      setCanResendVerification(false)
+      setMessage('Se a conta estiver pendente, enviaremos um novo link de confirmação.')
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 429) {
+        setError('Muitas tentativas. Aguarde um pouco antes de tentar novamente.')
+      } else if (reason instanceof ApiError && reason.status === 503) {
+        setError('Não foi possível enviar o e-mail agora. Tente novamente mais tarde.')
+      } else {
+        setError('Não foi possível solicitar a confirmação. Confira o endereço e tente novamente.')
       }
     } finally {
       setBusy(false)
@@ -102,6 +135,16 @@ export function AuthScreen({ notice, onLogin }: Props) {
               {busy ? 'Aguarde...' : mode === 'login' ? 'Entrar na minha conta' : 'Criar minha conta'} <ArrowRight size={18} />
             </button>
           </form>
+          {mode === 'login' && canResendVerification && (
+            <button
+              type="button"
+              className="text-button resend-verification"
+              disabled={busy}
+              onClick={resendConfirmation}
+            >
+              Reenviar e-mail de confirmação
+            </button>
+          )}
           <p className="auth-switch">
             {mode === 'login' ? 'Ainda não tem uma conta?' : 'Já tem uma conta?'}{' '}
             <button type="button" className="text-button" disabled={busy} onClick={() => changeMode(mode === 'login' ? 'register' : 'login')}>

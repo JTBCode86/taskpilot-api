@@ -30,6 +30,15 @@ services:
       Jwt__SigningKey: ${TASKPILOT_JWT_KEY:-}
       RateLimiting__Auth__LoginPermitLimit: "1000"
       RateLimiting__Auth__RegisterPermitLimit: "1000"
+      RateLimiting__Auth__VerifyEmailPermitLimit: "1000"
+      RateLimiting__Auth__ResendVerificationPermitLimit: "1000"
+      Email__FromAddress: ${TASKPILOT_EMAIL_FROM:-noreply@taskpilot.local}
+      Email__VerificationBaseUrl: ${TASKPILOT_EMAIL_VERIFICATION_BASE_URL:-http://localhost:5173/verify-email}
+      Email__Smtp__Host: ${TASKPILOT_SMTP_HOST:-mailpit}
+      Email__Smtp__Port: ${TASKPILOT_SMTP_PORT:-1025}
+      Email__Smtp__Username: ${TASKPILOT_SMTP_USERNAME:-}
+      Email__Smtp__Password: ${TASKPILOT_SMTP_PASSWORD:-}
+      Email__Smtp__UseSsl: ${TASKPILOT_SMTP_USE_SSL:-false}
       Observability__Otlp__Enabled: ${TASKPILOT_OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: TaskPilot.API
       OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
@@ -39,6 +48,14 @@ services:
     depends_on:
       db-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:${TASKPILOT_MAILPIT_PORT:-8025}:8025"
+      - "127.0.0.1:${TASKPILOT_MAILPIT_SMTP_PORT:-1025}:1025"
 
   aspire-dashboard:
     image: mcr.microsoft.com/aspire/dashboard:13

@@ -27,7 +27,7 @@ describe('TaskPilot', () => {
   it('cadastra, informa e-mail duplicado e volta ao login após o sucesso', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({}, 409))
-      .mockResolvedValueOnce(response({ userId: 7 }, 201))
+      .mockResolvedValueOnce(response({ message: 'Confirmation sent.' }, 202))
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
     render(<App />)
@@ -40,11 +40,44 @@ describe('TaskPilot', () => {
     await user.click(screen.getByRole('button', { name: 'Criar minha conta' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Este e-mail já está cadastrado')
     await user.click(screen.getByRole('button', { name: 'Criar minha conta' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Conta criada!')
+    expect(await screen.findByRole('status')).toHaveTextContent('Conta criada. Confira seu e-mail')
     expect(screen.getByRole('button', { name: /entrar na minha conta/i })).toBeInTheDocument()
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       firstName: 'Ana', lastName: 'Silva', email: 'ana@example.test', password,
     })
+  })
+
+  it('bloqueia login pendente e permite solicitar outro e-mail de confirmação', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({}, 403))
+      .mockResolvedValueOnce(response({ message: 'If eligible, sent.' }, 202))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await signIn(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sua conta ainda não foi confirmada')
+    await user.click(screen.getByRole('button', { name: 'Reenviar e-mail de confirmação' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Se a conta estiver pendente')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/auth/resend-verification')
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual({ email: 'person@example.test' })
+  })
+
+  it('só confirma o e-mail após ação explícita na página de confirmação', async () => {
+    window.history.pushState({}, '', '/verify-email#token=sample-token')
+    const fetchMock = vi.fn().mockResolvedValue(response(null, 204))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Confirmar e-mail' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('E-mail confirmado')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/verify-email', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ token: 'sample-token' }),
+    }))
+    window.history.replaceState({}, '', '/')
   })
 
   it('entra, cria e conclui tarefa, filtra e sai sem persistir o token', async () => {

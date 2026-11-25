@@ -11,6 +11,10 @@ namespace TaskPilot.Domain.Entities
         public string Email { get; set; }
         public string PasswordHash { get; set; }
         public bool IsActive { get; set; }
+        public bool EmailVerified { get; set; }
+        public string EmailVerificationTokenHash { get; set; }
+        public DateTimeOffset? EmailVerificationExpiresAtUtc { get; set; }
+        public DateTimeOffset? EmailVerificationLastSentAtUtc { get; set; }
         public DateTime CreatedAt { get; set; }
 
         // Propriedade de Navegação: Um Usuário pode ter muitas Tarefas

@@ -54,7 +54,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $repo 'src\Banco de dados') -Destination $fixture -Recurse
     $metadata = Join-Path $fixture 'Migrations\0002_migration_metadata.sql'
     $metadataContent = [System.IO.File]::ReadAllText($metadata)
-    Remove-Item -LiteralPath $metadata
+    Get-ChildItem -LiteralPath (Join-Path $fixture 'Migrations') -File | Remove-Item -Force
 
     $projectStarted = $true
     Invoke-Compose up -d db

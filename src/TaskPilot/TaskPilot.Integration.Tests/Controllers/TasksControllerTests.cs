@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -31,13 +32,57 @@ namespace TaskPilot.Integration.Tests.Controllers
             return new HttpClient { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(30) };
         }
 
+        private static async Task<string> GetVerificationToken(string email)
+        {
+            var mailpitUrl = Environment.GetEnvironmentVariable("TASKPILOT_MAILPIT_URL")
+                ?? "http://localhost:8025";
+            using var mailpit = new HttpClient { BaseAddress = new Uri(mailpitUrl), Timeout = TimeSpan.FromSeconds(10) };
+            for (var attempt = 0; attempt < 40; attempt++)
+            {
+                using var search = await mailpit.GetAsync(
+                    "/api/v1/search?query=" + Uri.EscapeDataString($"to:{email}"));
+                search.EnsureSuccessStatusCode();
+                using var result = JsonDocument.Parse(await search.Content.ReadAsStringAsync());
+                var messages = GetPropertyIgnoreCase(result.RootElement, "messages");
+                if (messages.ValueKind == JsonValueKind.Array && messages.GetArrayLength() > 0)
+                {
+                    var snippet = GetPropertyIgnoreCase(messages[0], "Snippet").GetString();
+                    var match = Regex.Match(snippet ?? string.Empty, @"#token=([A-Za-z0-9_-]+)");
+                    if (match.Success)
+                        return match.Groups[1].Value;
+                }
+
+                await Task.Delay(250);
+            }
+
+            Assert.Fail($"No verification email was captured for {email}.");
+            return null;
+        }
+
+        private static JsonElement GetPropertyIgnoreCase(JsonElement element, string name)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return property.Value;
+            }
+
+            Assert.Fail($"The Mailpit response did not contain the {name} field.");
+            return default;
+        }
+
         private static async Task<Session> CreateSession()
         {
             var client = CreateClient();
             var email = $"integration-{Guid.NewGuid():N}@example.test";
             var registration = await client.PostAsJsonAsync("/api/v1/auth/register",
                 new { firstName = "Integration", lastName = "Test", email, password = TestPassword });
-            Assert.AreEqual(HttpStatusCode.Created, registration.StatusCode, await registration.Content.ReadAsStringAsync());
+            Assert.AreEqual(HttpStatusCode.Accepted, registration.StatusCode, await registration.Content.ReadAsStringAsync());
+            var verificationToken = await GetVerificationToken(email);
+            var verification = await client.PostAsJsonAsync(
+                "/api/v1/auth/verify-email",
+                new { token = verificationToken });
+            Assert.AreEqual(HttpStatusCode.NoContent, verification.StatusCode);
             var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = TestPassword });
             Assert.AreEqual(HttpStatusCode.OK, login.StatusCode, await login.Content.ReadAsStringAsync());
             using var json = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
@@ -252,7 +297,16 @@ namespace TaskPilot.Integration.Tests.Controllers
             using var client = CreateClient();
             var email = $"integration-{Guid.NewGuid():N}@example.test";
             var registration = new { firstName = "Test", lastName = "User", email, password = TestPassword };
-            Assert.AreEqual(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/auth/register", registration)).StatusCode);
+            Assert.AreEqual(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/v1/auth/register", registration)).StatusCode);
+            Assert.AreEqual(HttpStatusCode.Forbidden,
+                (await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = TestPassword })).StatusCode);
+            var verificationToken = await GetVerificationToken(email);
+            Assert.AreEqual(HttpStatusCode.NoContent,
+                (await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { token = verificationToken })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.UnprocessableEntity,
+                (await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { token = verificationToken })).StatusCode);
+            Assert.AreEqual(HttpStatusCode.OK,
+                (await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = TestPassword })).StatusCode);
             var duplicate = new { firstName = "Test", lastName = "User", email = email.ToUpperInvariant(), password = TestPassword };
             Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/v1/auth/register", duplicate)).StatusCode);
             Assert.AreEqual(HttpStatusCode.Unauthorized,

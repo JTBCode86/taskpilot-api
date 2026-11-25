@@ -1,5 +1,37 @@
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
+import type { APIRequestContext } from '@playwright/test'
+
+async function getVerificationToken(
+  request: APIRequestContext,
+  email: string,
+) {
+  const mailpitUrl = process.env.TASKPILOT_MAILPIT_URL ?? 'http://127.0.0.1:8025'
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const search = await request.get(`${mailpitUrl}/api/v1/search`, {
+      params: { query: `to:${email}` },
+    })
+    if (!search.ok()) throw new Error(`Mailpit search failed (${search.status()}).`)
+    const data: unknown = await search.json()
+    if (typeof data === 'object' && data !== null) {
+      const record = data as Record<string, unknown>
+      const messages = record.messages ?? record.Messages
+      if (Array.isArray(messages) && messages.length > 0) {
+        const first = messages[0]
+        if (typeof first === 'object' && first !== null) {
+          const message = first as Record<string, unknown>
+          const snippet = message.Snippet ?? message.snippet
+          if (typeof snippet === 'string') {
+            const token = snippet.match(/#token=([A-Za-z0-9_-]+)/)?.[1]
+            if (token) return token
+          }
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error(`No verification email was captured for ${email}.`)
+}
 
 test('contas isoladas podem gerenciar suas tarefas', async ({ page }) => {
   const suffix = randomUUID()
@@ -15,7 +47,18 @@ test('contas isoladas podem gerenciar suas tarefas', async ({ page }) => {
     await page.getByLabel('E-mail').fill(email)
     await page.getByLabel('Senha').fill(password)
     await page.getByRole('button', { name: 'Criar minha conta' }).click()
-    await expect(page.getByRole('status')).toHaveText('Conta criada! Entre com seu e-mail e senha.')
+    await expect(page.getByRole('status')).toHaveText('Conta criada. Confira seu e-mail para confirmar o cadastro.')
+    await page.getByLabel('E-mail').fill(email)
+    await page.getByLabel('Senha').fill(password)
+    await page.getByRole('button', { name: 'Entrar na minha conta' }).click()
+    await expect(page.getByRole('alert')).toHaveText('Sua conta ainda não foi confirmada. Confira seu e-mail.')
+
+    const token = await getVerificationToken(page.request, email)
+    const verificationUrl = new URL(`/verify-email#token=${token}`, page.url()).toString()
+    await page.goto(verificationUrl)
+    await page.getByRole('button', { name: 'Confirmar e-mail' }).click()
+    await expect(page.getByRole('status')).toHaveText('E-mail confirmado. Sua conta já pode entrar.')
+    await page.getByRole('link', { name: 'Ir para o login' }).click()
   }
 
   async function login(email: string) {
