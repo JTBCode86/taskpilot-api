@@ -49,6 +49,16 @@ namespace TaskPilot.Integration.Tests.Controllers
 
             using (var otherClientRegistration = await PostInvalidRequest(client, "/api/v1/auth/register", "192.0.2.2"))
                 Assert.AreEqual(HttpStatusCode.BadRequest, otherClientRegistration.StatusCode);
+
+            using (var verification = await PostInvalidRequest(client, "/api/v1/auth/verify-email", "192.0.2.1"))
+                Assert.AreEqual(HttpStatusCode.BadRequest, verification.StatusCode);
+            using (var limitedVerification = await PostInvalidRequest(client, "/api/v1/auth/verify-email", "192.0.2.1"))
+                Assert.AreEqual(HttpStatusCode.TooManyRequests, limitedVerification.StatusCode);
+
+            using (var resend = await PostInvalidRequest(client, "/api/v1/auth/resend-verification", "192.0.2.1"))
+                Assert.AreEqual(HttpStatusCode.BadRequest, resend.StatusCode);
+            using (var limitedResend = await PostInvalidRequest(client, "/api/v1/auth/resend-verification", "192.0.2.1"))
+                Assert.AreEqual(HttpStatusCode.TooManyRequests, limitedResend.StatusCode);
         }
 
         private static WebApplication CreateApplication()
@@ -59,7 +69,9 @@ namespace TaskPilot.Integration.Tests.Controllers
                 ["ConnectionStrings:TaskPilotDBConnection"] =
                     "Server=localhost;Database=TaskPilotRateLimitTests;Integrated Security=true;TrustServerCertificate=true",
                 ["RateLimiting:Auth:LoginPermitLimit"] = "2",
-                ["RateLimiting:Auth:RegisterPermitLimit"] = "1"
+                ["RateLimiting:Auth:RegisterPermitLimit"] = "1",
+                ["RateLimiting:Auth:VerifyEmailPermitLimit"] = "1",
+                ["RateLimiting:Auth:ResendVerificationPermitLimit"] = "1"
             };
 
             var builder = WebApplication.CreateBuilder();

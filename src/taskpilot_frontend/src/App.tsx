@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AuthScreen } from './AuthScreen'
 import { Dashboard } from './Dashboard'
+import { VerifyEmailScreen } from './VerifyEmailScreen'
 import type { Session } from './api'
 import './App.css'
 
@@ -22,6 +23,10 @@ export default function App() {
     )
     return () => window.clearTimeout(timer)
   }, [session, signOut])
+
+  if (window.location.pathname === '/verify-email') {
+    return <VerifyEmailScreen />
+  }
 
   if (!session) {
     return <AuthScreen notice={notice} onLogin={(next) => { setNotice(''); setSession(next) }} />

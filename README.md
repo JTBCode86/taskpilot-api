@@ -26,7 +26,7 @@
 
 ## 📝Descrição
 
-O TaskPilot é um projeto didático de gerenciamento de tarefas, com API em ASP.NET Core, interface React, SQL Server e cliente de exemplo em Python. A solução permite cadastrar uma conta, autenticar-se e criar, consultar, editar, concluir e excluir as próprias tarefas.
+O TaskPilot é um projeto didático de gerenciamento de tarefas, com API em ASP.NET Core, interface React, SQL Server e cliente de exemplo em Python. A solução permite cadastrar uma conta, confirmar o e-mail, autenticar-se e criar, consultar, editar, concluir e excluir as próprias tarefas.
 
 Para criar uma tarefa, autentique-se e informe um título não vazio com até 256 caracteres. A tarefa pertence ao usuário do token; um título inválido retorna HTTP 400.
 
@@ -53,6 +53,7 @@ flowchart LR
     Browser["Navegador"] --> Frontend["React + Vite"]
     Frontend -->|Proxy /api| API["API ASP.NET Core"]
     Python["Cliente Python opcional"] -->|HTTP + JWT| API
+    API -->|SMTP| Mailpit["Mailpit local"]
     API --> Application["Aplicação"]
     Application --> Domain["Domínio"]
     API -. Configuração e dependências .-> Infrastructure["Infraestrutura"]
@@ -119,13 +120,14 @@ docker compose logs db-init api
 O serviço `db-init` aguarda o banco, inicializa a versão 1 em bancos vazios e aplica as migrações pendentes. Ele deve terminar com sucesso antes da API iniciar. Na primeira execução são criados os status e um usuário de demonstração de ID 1, sem senha utilizável. Se o banco já contiver objetos sem o marcador de inicialização, o processo interrompe a execução para evitar alterar dados existentes.
 
 - Swagger: http://localhost:8080/swagger
+- Caixa de entrada local do Mailpit: http://localhost:8025
 - API ativa (sem dependências): http://localhost:8080/health/live
 - API pronta para receber tráfego (inclui banco): http://localhost:8080/health/ready
 - O endpoint legado `/health` continua equivalente à prontidão.
 - A API emite logs JSON por requisição no console, com método, rota parametrizada, status, duração e `TraceId`; query string, cabeçalhos e corpo não são registrados.
 - Os endpoints de tarefas exigem um token de acesso; consulte a seção Autenticação.
 
-O Compose publica a API apenas na interface local e não publica a porta do banco. O volume `sql_data` mantém os dados entre reinicializações e `docker compose down`. A senha configurada na criação do volume continua sendo a senha do SQL Server; alterá-la em `.env` não muda a senha existente.
+O Compose publica a API e a caixa de entrada do Mailpit apenas na interface local e não publica a porta do banco. O Mailpit captura as mensagens sem enviá-las à internet; abra http://localhost:8025 para consultar o link de confirmação. O volume `sql_data` mantém os dados entre reinicializações e `docker compose down`. A senha configurada na criação do volume continua sendo a senha do SQL Server; alterá-la em `.env` não muda a senha existente.
 Se a porta 8080 estiver em uso, adicione `TASKPILOT_API_PORT=8081` ao `.env` e ajuste as URLs e `TASKPILOT_API_URL` do cliente.
 
 ```powershell
@@ -134,7 +136,33 @@ docker compose down
 
 **Atenção:** `docker compose down --volumes` apaga permanentemente o banco do projeto. Antes de aplicar migrações, remover volumes ou atualizar o SQL Server, faça um backup e copie-o para fora do volume. Bancos externos sem o marcador de versão não são importados automaticamente; sua adoção requer análise e migração separadas.
 
-Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação e da limitação de tentativas, ainda faltam HTTPS, verificação de e-mail e outros controles para produção. Não exponha a API na internet ou em redes não confiáveis.
+Este Compose é apenas para desenvolvimento: usa edição Developer, conexão interna com certificado confiado sem validação e credenciais administrativas. Apesar da autenticação, confirmação de e-mail e limitação de tentativas, ainda faltam controles operacionais e configurações adequadas para produção. Não exponha a API na internet ou em redes não confiáveis.
+
+### VPS de staging com Caddy
+
+O perfil de staging compila a interface React para arquivos estáticos e usa Caddy para servir a interface e encaminhar `/api` à API. Configure o domínio com DNS apontando para a VPS e permita tráfego TCP nas portas 80 e 443. O Caddy obtém e renova o certificado TLS automaticamente. Antes de iniciar, acrescente ao `.env`:
+
+```dotenv
+TASKPILOT_DOMAIN=taskpilot.seu-dominio.com
+TASKPILOT_STAGING_ALLOWED_CIDR=SEU_IP_PUBLICO/32
+```
+
+Mantenha também `MSSQL_SA_PASSWORD` e `TASKPILOT_JWT_KEY` configurados. O Caddy bloqueia todas as origens fora de `TASKPILOT_STAGING_ALLOWED_CIDR`; use o IP público de quem administrará/testará o staging, não uma faixa ampla. Por padrão, o Caddy usa `172.30.0.2` na rede privada `172.30.0.0/24`, e a API confia somente nesse IP. Se essa faixa já existir na VPS, defina `TASKPILOT_CADDY_SUBNET` e `TASKPILOT_CADDY_IP` juntos, com o IP dentro da sub-rede.
+
+Inicie o staging com:
+
+```powershell
+docker compose -f compose.yaml -f compose.staging.yaml --profile staging up --build -d
+docker compose -f compose.yaml -f compose.staging.yaml --profile staging logs caddy api
+```
+
+A API roda em `Production`, o Swagger fica desabilitado, os limites de autenticação voltam a 5 logins e 3 cadastros por IP por minuto, e o acesso direto à API permanece restrito ao loopback da VPS. A interface e a API ficam disponíveis no domínio configurado, somente para o CIDR autorizado. Para encerrar sem apagar os dados:
+
+```powershell
+docker compose -f compose.yaml -f compose.staging.yaml --profile staging down
+```
+
+Este perfil ainda usa SQL Server Developer. Por padrão, as mensagens são capturadas pelo Mailpit no próprio host; para receber mensagens fora do staging, configure um relay SMTP com `TASKPILOT_SMTP_HOST`, `TASKPILOT_SMTP_PORT`, `TASKPILOT_SMTP_USERNAME`, `TASKPILOT_SMTP_PASSWORD` e `TASKPILOT_SMTP_USE_SSL`. O painel do Mailpit fica restrito ao loopback da VPS. O perfil é somente para staging protegido com dados fictícios, não para produção nem para dados pessoais/reais. Antes de liberar acesso público, ainda são necessários armazenamento/licenciamento de banco apropriado, backups testados e controles operacionais.
 
 ## 💻Interface web
 
@@ -144,7 +172,7 @@ Para iniciar a interface React com a API e o banco, após configurar `.env` conf
 docker compose --profile frontend up --build -d
 ```
 
-Abra http://localhost:5173, crie uma conta ou entre com uma conta existente e gerencie suas tarefas. A interface e a API são publicadas apenas em `127.0.0.1`; o servidor de desenvolvimento encaminha `/api` para a API pela rede interna do Compose, sem habilitar CORS indiscriminadamente. Se a porta 5173 estiver ocupada, defina `TASKPILOT_FRONTEND_PORT` no `.env`.
+Abra http://localhost:5173, crie uma conta e consulte o link enviado na caixa do Mailpit em http://localhost:8025 para confirmar o endereço antes de entrar. Contas já existentes no banco são mantidas confirmadas pela migração. A interface e a API são publicadas apenas em `127.0.0.1`; o servidor de desenvolvimento encaminha `/api` para a API pela rede interna do Compose, sem habilitar CORS indiscriminadamente. Se a porta 5173 estiver ocupada, defina `TASKPILOT_FRONTEND_PORT` no `.env` e ajuste `TASKPILOT_EMAIL_VERIFICATION_BASE_URL` para essa porta.
 
 A lista permite filtrar tarefas por status, prioridade e prazo (incluindo as atrasadas) e ordená-las por prazo ou prioridade. Por padrão, as tarefas mais recentes aparecem primeiro.
 
@@ -199,29 +227,33 @@ Para a interface, no diretório `src\taskpilot_frontend`, execute `npm ci` e `np
 
 ### 🔍Testes ponta a ponta
 
-Os testes Playwright usam o Chromium e criam usuários e tarefas reais. Execute-os somente contra uma instância de teste dedicada, nunca contra dados que queira preservar. Com essa instância e a interface disponíveis, no diretório `src\taskpilot_frontend`:
+Os testes Playwright usam o Chromium, criam usuários e tarefas reais e leem os e-mails no Mailpit. Execute-os somente contra uma instância de teste dedicada, nunca contra dados que queira preservar. Com API, interface e Mailpit disponíveis, no diretório `src\taskpilot_frontend`:
 
 ```powershell
 npm ci
 npx playwright install chromium
 $env:TASKPILOT_E2E_URL = "http://127.0.0.1:5173"
+$env:TASKPILOT_MAILPIT_URL = "http://127.0.0.1:8025"
 npm run test:e2e
 Remove-Item Env:\TASKPILOT_E2E_URL
+Remove-Item Env:\TASKPILOT_MAILPIT_URL
 ```
 
 Altere a URL para a porta da instância de teste. Os dados criados permanecem no banco local; no CI, o banco e o volume são isolados e removidos ao final.
 
 ## 🔐Autenticação
 
-Os endpoints públicos de login e cadastro têm limites separados por IP: 5 tentativas de login e 3 cadastros por minuto. Ao exceder o limite, a API responde HTTP 429; as tentativas não ficam enfileiradas. O Compose de desenvolvimento, publicado apenas em `127.0.0.1`, usa limites maiores para que os testes locais compartilhem o mesmo endereço sem interferir entre si. Em hospedagem atrás de proxy, configure o encaminhamento de cabeçalhos para confiar somente no proxy conhecido antes de depender do IP do cliente; não confie em `X-Forwarded-For` enviado diretamente por qualquer origem.
+Os endpoints públicos de login e cadastro têm limites separados por IP: 5 tentativas de login e 3 cadastros por minuto. A confirmação permite 10 tentativas por minuto e o reenvio, 3. Ao exceder um limite, a API responde HTTP 429; as tentativas não ficam enfileiradas. O Compose de desenvolvimento, publicado apenas em `127.0.0.1`, usa limites maiores para que os testes locais compartilhem o mesmo endereço sem interferir entre si.
 
-Crie uma conta com `POST /api/v1/auth/register`, informando `firstName`, `lastName`, `email` e `password` (12 a 128 caracteres). Depois, use `POST /api/v1/auth/login` com e-mail e senha. O retorno contém `accessToken`, `userId` e `expiresAt`; envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
+Atrás de um proxy reverso, a API processa `X-Forwarded-For` e `X-Forwarded-Proto` somente de proxies confiáveis. Configure `ForwardedHeaders__KnownProxies__0` com o IP privado e estático do proxy (por exemplo, o IP do serviço Caddy na rede Docker) e `AllowedHosts` com o domínio publicado. Em `Production`, a API recusa iniciar se `AllowedHosts` estiver vazio ou contiver `*`. Não confie em cabeçalhos encaminhados de qualquer origem nem em uma faixa de rede mais ampla do que a necessária. HSTS é habilitado fora do ambiente `Development`; o proxy deve encaminhar `X-Forwarded-Proto: https` para que a API reconheça as requisições HTTPS terminadas no proxy.
+
+O cadastro (`POST /api/v1/auth/register`) retorna HTTP 202 e envia um link de confirmação. Acesse o link pelo navegador; a página exige uma ação explícita para confirmar, evitando que pré-visualizadores de e-mail consumam o token. O token aleatório tem validade de 24 horas, é armazenado somente como hash e só pode ser consumido uma vez. O login de uma conta pendente retorna HTTP 403; é possível solicitar novo link em `POST /api/v1/auth/resend-verification`, cuja resposta não revela se o endereço existe. Após confirmar, use `POST /api/v1/auth/login`; o retorno contém `accessToken`, `userId` e `expiresAt`. Envie o token como `Authorization: Bearer <token>` nos endpoints de tarefas. Há exemplos em `src/TaskPilot/TaskPilot.API/TaskPilot.http` e no Swagger.
 
 O token expira em 30 minutos. Cada usuário só pode consultar e concluir suas próprias tarefas; o `userId` opcional na criação deve corresponder ao token. Credenciais inválidas ou token ausente retornam 401; tentativas de acesso ao resumo ou criação para outro usuário retornam 403, e a conclusão de uma tarefa de outro usuário retorna 404. Alterar a chave JWT ou a senha invalida os tokens anteriores.
 
 Use `PUT /api/v1/tasks/{taskId}` com `title`, `description` e `priorityLevel` (1 a 3) para editar: a resposta é HTTP 200 com o identificador atualizado. O campo opcional `dueDate` aceita uma data e hora ISO 8601; omiti-lo preserva o prazo, enquanto `null` o remove. A interface envia a data escolhida às 23:59:59.9999999 sem fuso e usa a data armazenada como data de calendário, inclusive para prazos criados por outros clientes. `DELETE /api/v1/tasks/{taskId}` exclui a tarefa e retorna HTTP 204. Tarefas inexistentes ou de outro usuário retornam 404 em ambas as operações; a exclusão também remove os vínculos de categorias da tarefa.
 
-O usuário de demonstração existente continua sem senha utilizável e suas tarefas são preservadas. Para recuperar o acesso, com os containers em execução, use o comando administrativo local abaixo e digite a nova senha duas vezes. Ele exige acesso ao banco pelo Compose e não cria uma rota pública de recuperação:
+O usuário de demonstração existente continua sem senha utilizável e suas tarefas são preservadas. A migração marca contas preexistentes como confirmadas para não bloquear usuários que não receberam um link. Para recuperar o acesso à conta de demonstração, com os containers em execução, use o comando administrativo local abaixo e digite a nova senha duas vezes. Ele exige acesso ao banco pelo Compose e não cria uma rota pública de recuperação:
 
 ```powershell
 docker compose run --rm --no-deps api reset-password 1
@@ -240,7 +272,7 @@ Para alterar o esquema:
 2. Escreva SQL para uma única transação, sem `GO`, comandos `:sqlcmd`, `USE` ou comandos de controle de transação. Para objetos que exigem ser o primeiro comando do lote, como procedures, use SQL dinâmico com `EXEC(N'...')`. Não inclua operações que não possam ser revertidas pela transação.
 3. Pare a API com `docker compose stop api`, execute `docker compose up -d` e confira `docker compose logs db-init`. Cada migração é aplicada uma vez e registrada na mesma transação; falhas impedem a inicialização da API. Uma API que já esteja em execução não é interrompida automaticamente. Uma trava no banco serializa inicializadores concorrentes; caso dois processos tentem criar o banco vazio ao mesmo tempo, um deles pode precisar ser executado novamente.
 
-Os arquivos aplicados são identificados pelo nome e checksum SHA-256. Não edite, renomeie ou remova uma migração aplicada: crie outra para corrigir o esquema. O inicializador também recusa lacunas ou versões desconhecidas no histórico. Após uma falha, investigue os logs e corrija a migração ainda não aplicada antes de tentar novamente. As transações não substituem backups nem testes em uma cópia dos dados.
+Os arquivos aplicados são identificados pelo nome e checksum SHA-256. A migração 0003 adiciona o estado e os campos de token de verificação; contas existentes são preservadas como confirmadas. Não edite, renomeie ou remova uma migração aplicada: crie outra para corrigir o esquema. O inicializador também recusa lacunas ou versões desconhecidas no histórico. Após uma falha, investigue os logs e corrija a migração ainda não aplicada antes de tentar novamente. As transações não substituem backups nem testes em uma cópia dos dados.
 
 Os testes de migração usam um banco e volume Docker temporários isolados e os removem ao terminar. No Windows, com a política local permitindo executar scripts PowerShell:
 
@@ -258,7 +290,7 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-Por padrão o cliente acessa `http://localhost:8080`. Para outra instância, defina `TASKPILOT_API_URL` antes de executá-lo. Para HTTPS, o certificado deve ser confiável pelo ambiente Python. O exemplo faz login e cria e conclui uma tarefa da conta informada. Cadastre a conta primeiro, defina `TASKPILOT_EMAIL` e `TASKPILOT_PASSWORD` no ambiente local e remova essas variáveis após o uso. Não versione credenciais.
+Por padrão o cliente acessa `http://localhost:8080`. Para outra instância, defina `TASKPILOT_API_URL` antes de executá-lo. Para HTTPS, o certificado deve ser confiável pelo ambiente Python. O exemplo faz login e cria e conclui uma tarefa da conta informada. Cadastre a conta primeiro, confirme-a pelo link recebido e defina `TASKPILOT_EMAIL` e `TASKPILOT_PASSWORD` no ambiente local. Remova essas variáveis após o uso e não versione credenciais.
 
 ## 🛠Desenvolvimento e testes .NET
 
@@ -281,7 +313,7 @@ Sem essa variável, os testes de integração são marcados como inconclusivos. 
 
 ## 🔁Integração contínua
 
-O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo verifica, testa e compila a interface, compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local, o cliente Python e o fluxo ponta a ponta no Chromium contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
+O GitHub Actions executa o CI em cada push e pull request, ou manualmente pela aba Actions. O fluxo verifica, testa e compila a interface, compila a solução, executa os testes unitários .NET e Python, e testa a API, a recuperação local, o cliente Python, a confirmação de e-mail via Mailpit e o fluxo ponta a ponta no Chromium contra SQL Server em containers. Uma etapa separada verifica as migrações em um banco temporário. Os testes de integração precisam executar e passar, sem serem ignorados.
 
 Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao final; a senha do banco, a chave JWT e as credenciais do cliente de teste são geradas para cada execução. O CI não faz deploy.
 
@@ -298,5 +330,5 @@ Os ambientes de teste usam projetos e volumes Docker isolados, removidos ao fina
 
 Ideias para evolução do projeto:
 
-1. **Segurança e produção:** configurar HTTPS, verificação de e-mail e uma hospedagem adequada antes de expor a aplicação. Em hospedagem atrás de proxy, confiar somente nos cabeçalhos encaminhados por proxies conhecidos.
+1. **Segurança e produção:** o perfil de staging fornece HTTPS com Caddy e restrição por CIDR; a API confia somente no IP configurado do proxy e exige confirmação de e-mail. Antes de produção, ainda são necessários banco com licença/configuração adequada, backups testados, configuração SMTP real e controles operacionais.
 2. **Observabilidade em produção:** escolher um destino OTLP com retenção, alertas e controles de acesso adequados; o dashboard local desta etapa não é uma solução de monitoramento de produção.

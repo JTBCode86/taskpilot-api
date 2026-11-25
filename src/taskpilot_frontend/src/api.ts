@@ -73,6 +73,22 @@ export async function register(data: Registration): Promise<void> {
   })
 }
 
+export async function verifyEmail(token: string): Promise<void> {
+  await request('/api/v1/auth/verify-email', {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ token }),
+  })
+}
+
+export async function resendVerification(email: string): Promise<void> {
+  await request('/api/v1/auth/resend-verification', {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ email }),
+  })
+}
+
 export async function login(email: string, password: string): Promise<Session> {
   const result = await request('/api/v1/auth/login', {
     method: 'POST',

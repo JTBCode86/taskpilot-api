@@ -1,4 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
 using TaskPilot.Domain.Entities;
 using TaskPilot.Domain.Interfaces;
 using System.Threading.Tasks;
@@ -72,6 +74,46 @@ namespace TaskPilot.Infrastructure.Data.Repositories
                 throw new DuplicateUserException();
             }
             return entity.Id;
+        }
+
+        public async Task<bool> TryIssueEmailVerificationTokenAsync(
+            int userId,
+            string tokenHash,
+            DateTimeOffset expiresAtUtc,
+            DateTimeOffset sentAtUtc,
+            DateTimeOffset resendAllowedAfterUtc,
+            CancellationToken cancellationToken = default)
+        {
+            var updated = await _context.Users
+                .Where(user => user.Id == userId &&
+                    !user.EmailVerified &&
+                    (!user.EmailVerificationLastSentAtUtc.HasValue ||
+                     user.EmailVerificationLastSentAtUtc <= resendAllowedAfterUtc))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(user => user.EmailVerificationTokenHash, tokenHash)
+                    .SetProperty(user => user.EmailVerificationExpiresAtUtc, expiresAtUtc)
+                    .SetProperty(user => user.EmailVerificationLastSentAtUtc, sentAtUtc),
+                    cancellationToken);
+
+            return updated == 1;
+        }
+
+        public async Task<bool> VerifyEmailTokenAsync(
+            string tokenHash,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            var updated = await _context.Users
+                .Where(user => !user.EmailVerified &&
+                    user.EmailVerificationTokenHash == tokenHash &&
+                    user.EmailVerificationExpiresAtUtc > nowUtc)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(user => user.EmailVerified, true)
+                    .SetProperty(user => user.EmailVerificationTokenHash, (string)null)
+                    .SetProperty(user => user.EmailVerificationExpiresAtUtc, (DateTimeOffset?)null),
+                    cancellationToken);
+
+            return updated == 1;
         }
 
         public System.Threading.Tasks.Task UpdateAsync(User entity)

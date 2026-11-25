@@ -1,0 +1,50 @@
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      AllowedHosts: ${TASKPILOT_DOMAIN:?Defina TASKPILOT_DOMAIN no arquivo .env}
+      ForwardedHeaders__KnownProxies__0: ${TASKPILOT_CADDY_IP:-172.30.0.2}
+      RateLimiting__Auth__LoginPermitLimit: "5"
+      RateLimiting__Auth__RegisterPermitLimit: "3"
+      RateLimiting__Auth__VerifyEmailPermitLimit: "10"
+      RateLimiting__Auth__ResendVerificationPermitLimit: "3"
+      Email__VerificationBaseUrl: https://${TASKPILOT_DOMAIN:?Defina TASKPILOT_DOMAIN no arquivo .env}/verify-email
+    networks:
+      default: {}
+      edge: {}
+    restart: unless-stopped
+
+  db:
+    restart: unless-stopped
+
+  caddy:
+    profiles: ["staging"]
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    environment:
+      TASKPILOT_DOMAIN: ${TASKPILOT_DOMAIN:?Defina TASKPILOT_DOMAIN no arquivo .env}
+      TASKPILOT_STAGING_ALLOWED_CIDR: ${TASKPILOT_STAGING_ALLOWED_CIDR:?Defina TASKPILOT_STAGING_ALLOWED_CIDR no arquivo .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      edge:
+        ipv4_address: ${TASKPILOT_CADDY_IP:-172.30.0.2}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+networks:
+  default: {}
+  edge:
+    ipam:
+      config:
+        - subnet: ${TASKPILOT_CADDY_SUBNET:-172.30.0.0/24}
+
+volumes:
+  caddy_data:
+  caddy_config:

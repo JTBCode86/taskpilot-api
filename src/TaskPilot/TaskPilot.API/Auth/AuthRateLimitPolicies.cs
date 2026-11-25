@@ -13,6 +13,8 @@ namespace TaskPilot.API.Auth
     {
         public const string Login = "auth-login";
         public const string Register = "auth-register";
+        public const string VerifyEmail = "auth-verify-email";
+        public const string ResendVerification = "auth-resend-verification";
 
         public static void Configure(RateLimiterOptions options, IConfiguration configuration)
         {
@@ -30,9 +32,13 @@ namespace TaskPilot.API.Auth
 
             var loginPermitLimit = GetPermitLimit(configuration, "LoginPermitLimit");
             var registerPermitLimit = GetPermitLimit(configuration, "RegisterPermitLimit");
+            var verifyEmailPermitLimit = GetPermitLimit(configuration, "VerifyEmailPermitLimit");
+            var resendVerificationPermitLimit = GetPermitLimit(configuration, "ResendVerificationPermitLimit");
 
             options.AddPolicy(Login, context => CreateClientPolicy(context, loginPermitLimit));
             options.AddPolicy(Register, context => CreateClientPolicy(context, registerPermitLimit));
+            options.AddPolicy(VerifyEmail, context => CreateClientPolicy(context, verifyEmailPermitLimit));
+            options.AddPolicy(ResendVerification, context => CreateClientPolicy(context, resendVerificationPermitLimit));
         }
 
         private static int GetPermitLimit(IConfiguration configuration, string name)
